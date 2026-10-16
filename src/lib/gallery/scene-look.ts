@@ -96,7 +96,7 @@ export function zoneLighting(preset: ResolvedHallStyle["lighting"], mode: LightM
       break;
     case "off":
       // Flat natural light: no spotlights, no glare, so photos stay matte and true to color.
-      out = { ...base, hemiIntensity: Math.max(base.hemiIntensity, 0.55) * 1.35, fillIntensity: base.fillIntensity * 0.5, spotIntensity: 0, spots: false, glow: 0, shine: 0.15 };
+      out = { ...base, hemiIntensity: Math.max(base.hemiIntensity, 0.55) * 1.6, fillIntensity: base.fillIntensity * 0.5, spotIntensity: 0, spots: false, glow: 0, shine: 0.15 };
       break;
     default:
       out = { ...base, spots: true, glow: 1, shine: 1 };
