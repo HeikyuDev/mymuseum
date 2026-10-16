@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   DECOR_IDS,
+  LIGHT_MODES,
+  clampBrightness,
   FLOOR_DECORATIONS,
   FLOOR_STYLES,
   FRAME_STYLES,
@@ -74,11 +76,19 @@ export const appearanceSchema = z.object({
 });
 
 const decorSchema = z
-  .object(Object.fromEntries(DECOR_IDS.map((id) => [id, z.boolean().optional()])) as Record<
-    (typeof DECOR_IDS)[number],
-    z.ZodOptional<z.ZodBoolean>
-  >)
-  .transform((bag) => Object.fromEntries(DECOR_IDS.map((id) => [id, bag[id] === true])));
+  .object({
+    ...(Object.fromEntries(DECOR_IDS.map((id) => [id, z.boolean().optional()])) as Record<
+      (typeof DECOR_IDS)[number],
+      z.ZodOptional<z.ZodBoolean>
+    >),
+    lightMode: enumOf(LIGHT_MODES).optional(),
+    brightness: z.number().optional(),
+  })
+  .transform((bag) => ({
+    ...Object.fromEntries(DECOR_IDS.map((id) => [id, bag[id] === true])),
+    lightMode: bag.lightMode ?? "default",
+    brightness: clampBrightness(bag.brightness),
+  }));
 
 export const hallFieldsSchema = z
   .object({

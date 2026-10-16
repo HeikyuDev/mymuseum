@@ -13,22 +13,28 @@ import {
   decorationOptions,
   floorOptions,
   frameOptions,
+  lightModeOptions,
   lightingOptions,
   wallOptions,
 } from "@/components/studio/pickers";
 import { HallPreview } from "@/components/studio/previews";
 import { SaveBar } from "@/components/studio/SaveBar";
+import type { HallFieldsInput } from "@/lib/validation/schemas";
 import { cardClass, Field, inputClass, textareaClass } from "@/components/ui/panel";
 import { useI18n } from "@/lib/i18n/provider";
 import {
   DECOR_IDS,
   FLOOR_DECORATIONS,
   FLOOR_STYLES,
+  BRIGHTNESS_MAX,
+  BRIGHTNESS_MIN,
   FRAME_STYLES,
   LIGHTING_PRESETS,
+  LIGHT_MODES,
   WALL_STYLES,
   resolveHallStyle,
   type DecorId,
+  type LightMode,
 } from "@/lib/hall-style";
 import { useUnsavedGuard } from "@/hooks/useUnsavedGuard";
 import type { MessageKey } from "@/lib/i18n";
@@ -64,6 +70,8 @@ type Draft = {
   default_frame_style: FrameStyle;
   accent_color: string | null;
   decor: Record<DecorId, boolean>;
+  light_mode: LightMode;
+  brightness: number;
 };
 
 const DECOR_KEYS = {
@@ -87,7 +95,14 @@ function draftFromHall(hall: HallRow): Draft {
     default_frame_style: style.defaultFrameStyle,
     accent_color: style.accent,
     decor: Object.fromEntries(DECOR_IDS.map((id) => [id, style.decor.includes(id)])) as Record<DecorId, boolean>,
+    light_mode: style.lightMode,
+    brightness: style.brightness,
   };
+}
+
+/** The `halls.decor` jsonb bag carries the decor toggles and the light control. */
+function decorBag(draft: Draft): Json {
+  return { ...draft.decor, lightMode: draft.light_mode, brightness: draft.brightness };
 }
 
 export function HallEditor({ hall, artworks, museumTheme }: { hall: HallRow; artworks: ArtworkRow[]; museumTheme: MuseumTheme }) {
@@ -110,14 +125,17 @@ export function HallEditor({ hall, artworks, museumTheme }: { hall: HallRow; art
       ...hall,
       ...draft,
       description: draft.description || null,
-      decor: draft.decor as Json,
+      decor: decorBag(draft),
     };
     return buildViewerMuseum({ museum: museumTheme, halls: [draftRow], artworks }).halls[0];
   }, [draft, hall, artworks, museumTheme]);
 
   function save() {
     startTransition(async () => {
-      const result = await updateHall(hall.id, draft);
+      const { light_mode: _mode, brightness: _brightness, ...fields } = draft;
+      void _mode;
+      void _brightness;
+      const result = await updateHall(hall.id, { ...fields, decor: decorBag(draft) as HallFieldsInput["decor"] });
       if (!result.ok) {
         setErrors(result.fieldErrors ?? {});
         toast.error(result.error);
@@ -207,6 +225,15 @@ export function HallEditor({ hall, artworks, museumTheme }: { hall: HallRow; art
           <section className={`${cardClass} flex flex-col gap-5 p-5`} aria-labelledby="mood">
             <h2 id="mood" className="font-display text-lg font-semibold">{t("cat.lightingFrames")}</h2>
             <OptionGroup legend={t("cat.lighting")} hint={t("cat.lightingHint")} name="lighting" value={draft.lighting_preset} options={lightingOptions(t, LIGHTING_PRESETS)} onChange={(value) => patch("lighting_preset", value)} columns="grid-cols-2 sm:grid-cols-4" />
+            <OptionGroup legend={t("cat.lightMode")} hint={t("cat.lightModeHint")} name="light-mode" value={draft.light_mode} options={lightModeOptions(t, LIGHT_MODES)} onChange={(value) => patch("light_mode", value)} columns="grid-cols-2 sm:grid-cols-4" />
+            <div>
+              <label htmlFor="hall-brightness" className="mb-1.5 flex items-baseline justify-between text-sm font-medium">
+                <span>{t("cat.brightness")}</span>
+                <span className="tabular-nums text-muted">{draft.brightness}%</span>
+              </label>
+              <input id="hall-brightness" type="range" min={BRIGHTNESS_MIN} max={BRIGHTNESS_MAX} step={5} value={draft.brightness} onChange={(event) => patch("brightness", Number(event.target.value))} aria-describedby="hall-brightness-hint" className="w-full accent-[var(--v-accent,currentColor)]" />
+              <p id="hall-brightness-hint" className="mt-1 text-sm text-muted">{t("cat.brightnessHint")}</p>
+            </div>
             {framePickerArt}
             <ColorField
               id="hall-accent"

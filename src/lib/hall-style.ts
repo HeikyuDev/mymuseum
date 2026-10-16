@@ -26,6 +26,26 @@ export const FLOOR_DECORATIONS: readonly FloorDecoration[] = [
 export const DECOR_IDS = ["rope_barriers", "benches", "plants"] as const;
 export type DecorId = (typeof DECOR_IDS)[number];
 
+/**
+ * Per-hall light control, stored in the same `halls.decor` jsonb bag (keys `lightMode` and
+ * `brightness`), so it needs no migration. Missing or invalid values fall back to the defaults.
+ */
+export const LIGHT_MODES = ["default", "soft", "dim", "off"] as const;
+export type LightMode = (typeof LIGHT_MODES)[number];
+export const BRIGHTNESS_MIN = 40;
+export const BRIGHTNESS_MAX = 120;
+export const BRIGHTNESS_DEFAULT = 100;
+
+export function clampBrightness(value: unknown): number {
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isFinite(n)) return BRIGHTNESS_DEFAULT;
+  return Math.min(BRIGHTNESS_MAX, Math.max(BRIGHTNESS_MIN, Math.round(n)));
+}
+
+export function resolveLightMode(value: unknown): LightMode {
+  return typeof value === "string" && (LIGHT_MODES as readonly string[]).includes(value) ? (value as LightMode) : "default";
+}
+
 /** White-gallery defaults used when a hall has no explicit style. */
 export const HALL_DEFAULTS = {
   wallStyle: "plaster",
@@ -51,6 +71,9 @@ export type ResolvedHallStyle = {
   defaultFrameStyle: FrameStyle;
   accent: string | null;
   decor: readonly DecorId[];
+  lightMode: LightMode;
+  /** Exposure scale for the hall in percent (40-120). */
+  brightness: number;
 };
 
 type HallStyleInput = Partial<
@@ -88,5 +111,11 @@ export function resolveHallStyle(row: HallStyleInput = {}): ResolvedHallStyle {
     defaultFrameStyle: oneOf(FRAME_STYLES, row.default_frame_style, HALL_DEFAULTS.frameStyle),
     accent: isHex(row.accent_color) ? row.accent_color : null,
     decor: resolveDecor(row.decor),
+    ...resolveHallLight(row.decor),
   };
+}
+
+export function resolveHallLight(raw: unknown): { lightMode: LightMode; brightness: number } {
+  const bag = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  return { lightMode: resolveLightMode(bag.lightMode), brightness: clampBrightness(bag.brightness) };
 }

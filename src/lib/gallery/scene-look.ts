@@ -1,5 +1,5 @@
 import { FLOOR_BASE, WALL_BASE } from "@/lib/scene-palette";
-import type { ResolvedHallStyle } from "@/lib/hall-style";
+import type { LightMode, ResolvedHallStyle } from "@/lib/hall-style";
 import type { ThemePreset } from "@/types/database";
 
 // Pure description of how a zone looks and is lit. The 3D components only turn
@@ -17,62 +17,100 @@ export type ZoneLighting = {
   spotPenumbra: number;
   fog: string;
   exposure: number;
+  /** False when the hall has no artificial spotlights (light mode Off). */
+  spots: boolean;
+  /** Strength (0-1) of the baked light glow on the wall behind each artwork. */
+  glow: number;
+  /** Scales reflections on walls, floors and frames (0 = matte). */
+  shine: number;
 };
 
-const LIGHTING: Record<ResolvedHallStyle["lighting"], ZoneLighting> = {
+type BaseLighting = Omit<ZoneLighting, "spots" | "glow" | "shine">;
+
+const LIGHTING: Record<ResolvedHallStyle["lighting"], BaseLighting> = {
   soft: {
     hemiSky: "#ffffff",
     hemiGround: "#e6dfd3",
-    hemiIntensity: 0.6,
+    hemiIntensity: 0.5,
     fill: "#fff8ee",
-    fillIntensity: 0.3,
+    fillIntensity: 0.2,
     spot: "#fff6e8",
-    spotIntensity: 120,
+    spotIntensity: 70,
     spotAngle: 0.62,
     spotPenumbra: 0.95,
     fog: "#f1ede6",
-    exposure: 0.88,
+    exposure: 0.78,
   },
   warm: {
     hemiSky: "#fff0d8",
     hemiGround: "#d8bf99",
-    hemiIntensity: 0.7,
+    hemiIntensity: 0.55,
     fill: "#ffd9a8",
-    fillIntensity: 0.4,
+    fillIntensity: 0.25,
     spot: "#ffd6a0",
-    spotIntensity: 120,
+    spotIntensity: 75,
     spotAngle: 0.56,
     spotPenumbra: 0.9,
     fog: "#e9d9bf",
-    exposure: 1.0,
+    exposure: 0.84,
   },
   cold: {
     hemiSky: "#e8f1ff",
     hemiGround: "#c4d0e2",
-    hemiIntensity: 0.75,
+    hemiIntensity: 0.6,
     fill: "#d6e6ff",
-    fillIntensity: 0.4,
+    fillIntensity: 0.25,
     spot: "#d2e4ff",
-    spotIntensity: 100,
+    spotIntensity: 65,
     spotAngle: 0.58,
     spotPenumbra: 0.9,
     fog: "#dfe6f0",
-    exposure: 1.0,
+    exposure: 0.84,
   },
   dramatic: {
     hemiSky: "#ffeedd",
     hemiGround: "#3a3028",
-    hemiIntensity: 0.36,
+    hemiIntensity: 0.3,
     fill: "#ffe8cc",
-    fillIntensity: 0.12,
+    fillIntensity: 0.08,
     spot: "#fff0d6",
-    spotIntensity: 210,
+    spotIntensity: 140,
     spotAngle: 0.42,
     spotPenumbra: 0.7,
     fog: "#1d1814",
-    exposure: 0.95,
+    exposure: 0.84,
   },
 };
+
+/** Turns a preset plus the hall light mode and brightness into render-ready light values. */
+export function zoneLighting(preset: ResolvedHallStyle["lighting"], mode: LightMode = "default", brightness = 100): ZoneLighting {
+  const base = LIGHTING[preset];
+  const scale = brightness / 100;
+  let out: ZoneLighting;
+  switch (mode) {
+    case "soft":
+      out = { ...base, hemiIntensity: base.hemiIntensity * 1.1, spotIntensity: base.spotIntensity * 0.5, spotPenumbra: 1, spots: true, glow: 0.55, shine: 0.55 };
+      break;
+    case "dim":
+      out = { ...base, hemiIntensity: base.hemiIntensity * 0.7, fillIntensity: base.fillIntensity * 0.6, spotIntensity: base.spotIntensity * 0.8, exposure: base.exposure * 0.85, spots: true, glow: 0.8, shine: 0.7 };
+      break;
+    case "off":
+      // Flat natural light: no spotlights, no glare, so photos stay matte and true to color.
+      out = { ...base, hemiIntensity: Math.max(base.hemiIntensity, 0.55) * 1.35, fillIntensity: base.fillIntensity * 0.5, spotIntensity: 0, spots: false, glow: 0, shine: 0.15 };
+      break;
+    default:
+      out = { ...base, spots: true, glow: 1, shine: 1 };
+  }
+  return { ...out, exposure: out.exposure * scale };
+}
+
+/**
+ * Brightness multiplier (0-1) of the unlit photo surface. Photos are never lit by the room, so
+ * they keep their true colors; only a very dim room lowers them slightly, so they do not glow.
+ */
+export function photoLevel(lighting: ZoneLighting): number {
+  return Math.min(1, 0.74 + 0.26 * (lighting.exposure / 0.78));
+}
 
 export type SceneMood = {
   /** Multiplies the ambient light of every zone. */
@@ -105,6 +143,8 @@ export type ZoneLook = {
   accent: string | null;
   decor: ResolvedHallStyle["decor"];
   lighting: ZoneLighting;
+  lightMode: LightMode;
+  brightness: number;
 };
 
 export function zoneLook(style: ResolvedHallStyle): ZoneLook {
@@ -117,11 +157,13 @@ export function zoneLook(style: ResolvedHallStyle): ZoneLook {
     decorationColor: style.floorDecorationColor,
     accent: style.accent,
     decor: style.decor,
-    lighting: LIGHTING[style.lighting],
+    lighting: zoneLighting(style.lighting, style.lightMode, style.brightness),
+    lightMode: style.lightMode,
+    brightness: style.brightness,
   };
 }
 
-export const lightingPreset = (name: ResolvedHallStyle["lighting"]): ZoneLighting => LIGHTING[name];
+export const lightingPreset = (name: ResolvedHallStyle["lighting"], mode: LightMode = "default", brightness = 100): ZoneLighting => zoneLighting(name, mode, brightness);
 
 /** Polished floors reflect their surroundings; carpet and concrete stay matte. */
 export const FLOOR_FINISH: Record<ResolvedHallStyle["floorStyle"], { roughness: number; reflective: boolean; metalness: number }> = {

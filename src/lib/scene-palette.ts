@@ -4,20 +4,20 @@ import type { FloorDecoration, FloorStyle, FrameStyle, LightingPreset, WallStyle
 // CSS wall and frame previews in the admin pickers. No DOM, no CSS: just palettes and numbers.
 
 export const WALL_BASE: Record<WallStyle, string> = {
-  plaster: "#f1ede6",
+  plaster: "#e7e2d8",
   brick: "#8f4333",
   concrete: "#a3a5a7",
   wood_panel: "#8a5a36",
-  marble: "#eeebe6",
+  marble: "#e3dfd8",
   velvet: "#5b1a2c",
   linen: "#d8ccb5",
-  custom_color: "#efebe4",
+  custom_color: "#e8e4dc",
 };
 
 export const FLOOR_BASE: Record<FloorStyle, string> = {
-  parquet: "#d2b48c",
-  marble: "#e4e0d9",
-  concrete: "#a9abad",
+  parquet: "#c4b49c",
+  marble: "#d8d4cc",
+  concrete: "#9fa1a3",
   carpet: "#6b3a43",
   dark_wood: "#4a301e",
 };
@@ -43,10 +43,10 @@ export type DecorationSpec = {
 };
 
 export const FLOOR_DECORATION_SPECS: Record<Exclude<FloorDecoration, "none">, DecorationSpec> = {
-  red_carpet: { kind: "runner", color: "#9b1c28" },
-  runner_gold_trim: { kind: "runner", color: "#1f4a3a" },
-  rug_persian: { kind: "rug", color: "#7a2430" },
-  rug_geometric: { kind: "rug", color: "#2f3a4a" },
+  red_carpet: { kind: "runner", color: "#86303a" },
+  runner_gold_trim: { kind: "runner", color: "#2f4b41" },
+  rug_persian: { kind: "rug", color: "#6d343b" },
+  rug_geometric: { kind: "rug", color: "#3b4552" },
   spotlight_pool: { kind: "pool", color: "#fff6dc" },
 };
 

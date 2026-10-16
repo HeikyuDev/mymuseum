@@ -9,6 +9,7 @@ import {
   floorLayer,
   wallLayer,
 } from "@/components/viewer/scenery";
+import type { LightMode } from "@/lib/hall-style";
 import type { Translator } from "@/lib/i18n";
 import { FONT_PAIRING_STACKS, THEME_PRESETS } from "@/lib/theme";
 import type {
@@ -126,6 +127,21 @@ export function lightingOptions(t: Translator, values: readonly LightingPreset[]
       ),
     };
   });
+}
+
+const LIGHT_MODE_PREVIEW: Record<LightMode, string> = {
+  default: "radial-gradient(ellipse at 50% 30%, rgba(255,246,220,0.95) 0%, rgba(255,246,220,0) 62%), #d8d2c6",
+  soft: "radial-gradient(ellipse at 50% 30%, rgba(255,246,220,0.55) 0%, rgba(255,246,220,0) 80%), #d8d2c6",
+  dim: "radial-gradient(ellipse at 50% 30%, rgba(255,230,180,0.4) 0%, rgba(0,0,0,0) 60%), #6f695e",
+  off: "#cfcabf",
+};
+
+export function lightModeOptions(t: Translator, values: readonly LightMode[]): Option<LightMode>[] {
+  return values.map((value) => ({
+    value,
+    label: t(`cat.lightMode.${value}` as const),
+    preview: <span className={cover} style={{ background: LIGHT_MODE_PREVIEW[value] }} />,
+  }));
 }
 
 /** Frame swatches render the real viewer frame around a sample picture. */
