@@ -10,7 +10,7 @@ MyMuseum is a multi-tenant platform for virtual museums. Each client gets their 
 - **2.5D viewer**: a button-only experience (no free camera) with animated gliding between artworks and doorway transitions between halls. Works with touch, mouse and keyboard.
 - **Customization**: museum theme presets, accent color and font pairing; per-hall wall, floor, lighting, frame style and floor decorations (carpets, rugs, spotlight pool) plus decor such as rope barriers, benches and plants.
 - **Live preview**: the admin editors render the real viewer while you edit.
-- **Planned**: export a museum-styled Story image (see [Roadmap](#roadmap)).
+- **Image export**: turn any artwork into a share-ready picture of the museum wall (Story 9:16, Post 4:5 or Square 1:1) with the hall's wall, lighting and frame. See [Image export](#image-export).
 
 ## Areas and roles
 
@@ -104,6 +104,30 @@ Security model:
 - **Service role is server-only.** `SUPABASE_SERVICE_ROLE_KEY` is used by `src/lib/supabase/admin.ts` (marked `server-only`) for creating, updating and deleting auth users and for Storage cleanup. It is never sent to the browser.
 - **Super admin guard rails.** Server actions re-check the role on every call; a super admin cannot disable or delete themselves or the last active super admin. Passwords are never logged or stored; a generated password is shown once.
 
+## Image export
+
+Every artwork can be exported as a picture that looks like a photograph of the museum wall: the hall's real wall style and lighting, the artwork hanging centered with its frame, thickness and cast shadow, and the artwork title below it. Nothing is uploaded; the image is drawn in the browser and shared or downloaded from there.
+
+- **Visitors** (public viewer): a single **Download image** button in the artwork detail panel. They only pick a format; the look is automatic (the hall's style, photo-friendly defaults, a small museum watermark) and the text comes from the artwork. The caption shows only the title, plus the year as a small discreet line. The author and description are never shown.
+- **Owners** (admin, artworks list and editor): the same dialog with advanced options: edit the export title, small detail line and an optional description, choose another hall or wall preset, show the floor and decoration, tint the wall, change lighting (spotlight, vignette, grain), frame, mat, caption style, text color and watermark, and pick JPEG for a smaller file. The last-used style options are remembered in `localStorage` (text is not).
+- **Access control**: `museums.theme_overrides.allowVisitorExport` (default `true`, no migration) turns visitor downloads off in **Admin > Appearance > Sharing**. Owners can always export.
+- **Share or download**: the Web Share API with a file where supported (so it can go straight to Instagram or WhatsApp), otherwise a download named `{museum}-{artwork}-{format}.png`.
+
+How it works:
+
+```text
+resolveHallStyle / resolveMuseumTheme + artwork + photo statistics
+        -> resolveStoryPlan()   (src/lib/story/plan.ts)    fully resolved plan
+        -> renderStory()        (src/lib/story/render.ts)  Canvas 2D: wall, floor, light, frame, caption
+```
+
+- A pure Canvas 2D renderer (no DOM-to-image) so the output is identical on iOS Safari, Android Chrome and desktop. Layout math (fit for any aspect ratio, Instagram safe zones, text wrapping and auto-fit, color heuristics, filenames) lives in pure modules under `src/lib/story` and is unit tested.
+- Photo-friendly "Auto": wide mat, thin frame, a mat and frame tone that suit the photo and the wall, a slightly dimmed bright wall behind a bright photo, text color chosen by contrast against the real pixels behind it, and a plaque for busy wall textures. Low-resolution photos are never upscaled more than 3x, and EXIF orientation is respected.
+- Photos are loaded with CORS (`crossOrigin="anonymous"`), so the image host must send CORS headers (the Supabase public bucket does). If it does not, the dialog shows a clear message instead of failing silently.
+- Palettes shared with the CSS viewer live in `src/lib/scene-palette.ts`.
+
+<!-- DEMO: add GIF here -->
+
 ## Getting started
 
 Prerequisites: Node.js 20 or newer, npm, and a [Supabase](https://supabase.com) project.
@@ -174,7 +198,7 @@ The app deploys to [Vercel](https://vercel.com) as a standard Next.js project.
 | 2 | Public 2.5D viewer and theming | Done |
 | 3 | Museum admin: halls, artworks, appearance, settings, live preview | Done |
 | 4 | Super admin: client onboarding and account management | Done |
-| 5 | Story export: museum-styled vertical image of an artwork or hall | Pending |
+| 5 | Image export: museum-styled Story, Post and Square images of an artwork | Done |
 
 Known gaps: storage usage per museum is not tracked, and there is no self-service password change for clients yet.
 
