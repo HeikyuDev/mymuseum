@@ -34,4 +34,10 @@ describe("resolveMuseumTheme", () => {
     expect(theme.overrides.radius).toBe("round");
     expect(theme.overrides.motion).toBe("normal");
   });
+  it("allows visitor exports by default and respects an explicit opt-out", () => {
+    expect(resolveMuseumTheme({}).overrides.allowVisitorExport).toBe(true);
+    expect(resolveMuseumTheme({ theme_overrides: { radius: "soft" } }).overrides.allowVisitorExport).toBe(true);
+    expect(resolveMuseumTheme({ theme_overrides: { allowVisitorExport: false } }).overrides.allowVisitorExport).toBe(false);
+    expect(resolveMuseumTheme({ theme_overrides: { allowVisitorExport: "no" } }).overrides.allowVisitorExport).toBe(true);
+  });
 });
