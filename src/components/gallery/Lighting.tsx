@@ -6,13 +6,17 @@ import { useEffect, useMemo, useRef } from "react";
 import { Color, Fog, Object3D, PCFSoftShadowMap, PMREMGenerator, SpotLight, type DirectionalLight, type HemisphereLight } from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { EYE_CENTER, ROOM_DEPTH, WALL_HEIGHT, zoneBlendAt } from "@/lib/gallery/layout";
+import { nearestIndices } from "@/lib/gallery/spot-pool";
 import { useGallery } from "./context";
 
 type Slot = { art: number; level: number; target: number };
 
 const SPOT_Z = 2.5;
 
-/** Hemisphere + fill + pooled spotlights + a procedural reflection environment. */
+/**
+ * Hemisphere + fill + pooled spotlights + a procedural reflection environment.
+ * The cheap tier (and halls whose lighting is Off) use no real spotlights at all.
+ */
 export function Lighting() {
   const { layout, looks, mood, quality, cameraX, snapshot } = useGallery();
   const scene = useThree((state) => state.scene);
@@ -22,14 +26,20 @@ export function Lighting() {
   const hemi = useRef<HemisphereLight>(null);
   const fill = useRef<DirectionalLight>(null);
 
-  const colors = useMemo(
-    () => ({ a: new Color(), b: new Color(), c: new Color() }),
-    [],
-  );
+  // Without real spotlights the ambient light carries the room: lift it so the cheap tier is not gloomy.
+  const ambientBoost = quality.baked ? 2.3 : 1;
+  const colors = useMemo(() => ({ a: new Color(), b: new Color() }), []);
+
+  // Artworks that can be lit by a spotlight (zones whose lighting is not Off), sorted by x.
+  const spotArtworks = useMemo(() => layout.artworks.filter((art) => looks[art.zoneIndex]?.lighting.spots), [layout, looks]);
+  const spotXs = useMemo(() => spotArtworks.map((art) => art.x), [spotArtworks]);
+  const poolSize = quality.baked ? 0 : Math.min(quality.spotCount, spotArtworks.length);
+  const wanted = useMemo(() => new Int32Array(Math.max(poolSize, 1)).fill(-1), [poolSize]);
+  const wantedView = useMemo(() => wanted.subarray(0, poolSize), [wanted, poolSize]);
 
   const pool = useMemo(
     () =>
-      Array.from({ length: quality.spotCount }, (_, i) => {
+      Array.from({ length: poolSize }, (_, i) => {
         const light = new SpotLight("#ffffff", 0, 22, 0.6, 0.9, 2);
         light.castShadow = quality.shadows && i < quality.shadowLights;
         if (light.castShadow) {
@@ -44,7 +54,7 @@ export function Lighting() {
         light.target = target;
         return { light, target, slot: { art: -1, level: 0, target: 0 } as Slot };
       }),
-    [quality.spotCount, quality.shadows, quality.shadowLights, quality.shadowMapSize],
+    [poolSize, quality.shadows, quality.shadowLights, quality.shadowMapSize],
   );
 
   useEffect(() => {
@@ -64,13 +74,14 @@ export function Lighting() {
   );
 
   // Procedural reflection environment (a softly lit neutral room): metal frames and polished floors
-  // need something to reflect, and generating it needs no network request.
+  // need something to reflect, and generating it needs no network request. Skipped on the cheap tier.
   useEffect(() => {
+    if (quality.envIntensity <= 0) return;
     const generator = new PMREMGenerator(gl);
     const room = new RoomEnvironment();
     const target = generator.fromScene(room, 0.04);
     scene.environment = target.texture;
-    scene.environmentIntensity = 0.55;
+    scene.environmentIntensity = quality.envIntensity;
     generator.dispose();
     room.dispose();
     invalidate();
@@ -82,7 +93,7 @@ export function Lighting() {
         // The renderer may already be disposed when a one-shot photo scene unmounts.
       }
     };
-  }, [gl, scene, invalidate]);
+  }, [gl, scene, invalidate, quality.envIntensity]);
 
   useFrame((_, delta) => {
     const blend = zoneBlendAt(layout, cameraX.current);
@@ -97,12 +108,12 @@ export function Lighting() {
       hemi.current.color.copy(colors.a);
       colors.a.set(from.hemiGround).lerp(colors.b.set(to.hemiGround), t);
       hemi.current.groundColor.copy(colors.a);
-      hemi.current.intensity = lerp(from.hemiIntensity, to.hemiIntensity) * mood.ambientScale;
+      hemi.current.intensity = lerp(from.hemiIntensity, to.hemiIntensity) * mood.ambientScale * ambientBoost;
     }
     if (fill.current) {
       colors.a.set(from.fill).lerp(colors.b.set(to.fill), t);
       fill.current.color.copy(colors.a);
-      fill.current.intensity = lerp(from.fillIntensity, to.fillIntensity) * mood.ambientScale;
+      fill.current.intensity = lerp(from.fillIntensity, to.fillIntensity) * mood.ambientScale * ambientBoost;
       fill.current.position.set(cameraX.current + 1.5, 3.6, ROOM_DEPTH - 1);
       fill.current.target.position.set(cameraX.current, 1.2, 0);
       fill.current.target.updateMatrixWorld();
@@ -113,36 +124,41 @@ export function Lighting() {
     }
     gl.toneMappingExposure = lerp(from.exposure, to.exposure);
 
-    // ---- spotlight pool: the lights follow the artworks nearest the camera ----
-    const cx = cameraX.current;
-    const wanted = layout.artworks
-      .map((a) => ({ index: a.index, distance: Math.abs(a.x - cx) }))
-      .sort((p, q) => p.distance - q.distance)
-      .slice(0, pool.length)
-      .map((entry) => entry.index);
-    const wantedSet = new Set(wanted);
+    if (pool.length === 0) return;
+
+    // ---- spotlight pool: the lights follow the artworks nearest the camera (no allocations) ----
+    nearestIndices(spotXs, cameraX.current, wantedView);
     let animating = false;
 
     for (const { slot } of pool) {
-      slot.target = slot.art >= 0 && wantedSet.has(slot.art) ? 1 : 0;
+      let keep = false;
+      for (let i = 0; i < wantedView.length; i += 1) if (wantedView[i] === slot.art) keep = true;
+      slot.target = slot.art >= 0 && keep ? 1 : 0;
       if (slot.target === 0 && slot.level < 0.02) slot.art = -1;
     }
-    const assigned = new Set(pool.map(({ slot }) => slot.art));
-    for (const index of wanted) {
-      if (assigned.has(index)) continue;
-      const free = pool.find(({ slot }) => slot.art === -1);
+    for (let i = 0; i < wantedView.length; i += 1) {
+      const index = wantedView[i];
+      let assigned = false;
+      for (const { slot } of pool) if (slot.art === index) assigned = true;
+      if (assigned) continue;
+      let free: Slot | null = null;
+      for (const { slot } of pool) {
+        if (slot.art === -1) {
+          free = slot;
+          break;
+        }
+      }
       if (!free) break;
-      free.slot.art = index;
-      free.slot.target = 1;
-      if (snapshot) free.slot.level = 1;
-      assigned.add(index);
+      free.art = index;
+      free.target = 1;
+      if (snapshot) free.level = 1;
     }
 
     const rate = Math.min(1, delta * 5);
     for (const { light, target, slot } of pool) {
       slot.level = snapshot ? slot.target : slot.level + (slot.target - slot.level) * rate;
       if (Math.abs(slot.target - slot.level) > 0.01) animating = true;
-      const art = slot.art >= 0 ? layout.artworks[slot.art] : null;
+      const art = slot.art >= 0 ? spotArtworks[slot.art] : null;
       if (!art) {
         light.intensity = 0;
         continue;

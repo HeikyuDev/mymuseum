@@ -100,22 +100,23 @@ const hash2 = (a: number, b: number, seed: number) => {
 
 // ---- canvas plumbing -----------------------------------------------------
 
-function paint(size: number, sample: (u: number, v: number) => Sample): { color: HTMLCanvasElement; bump: HTMLCanvasElement; rough: HTMLCanvasElement } {
-  const make = () => {
+function paint(size: number, sample: (u: number, v: number) => Sample, colorOnly = false): { color: HTMLCanvasElement; bump: HTMLCanvasElement; rough: HTMLCanvasElement } {
+  // colorOnly (cheap tier): bump and roughness maps are never read, so they stay 1x1 and the sampler loop skips them.
+  const make = (side = size) => {
     const canvas = document.createElement("canvas");
-    canvas.width = size;
-    canvas.height = size;
+    canvas.width = side;
+    canvas.height = side;
     return canvas;
   };
   const color = make();
-  const bump = make();
-  const rough = make();
+  const bump = make(colorOnly ? 1 : size);
+  const rough = make(colorOnly ? 1 : size);
   const cctx = color.getContext("2d")!;
   const bctx = bump.getContext("2d")!;
   const rctx = rough.getContext("2d")!;
   const cdata = cctx.createImageData(size, size);
-  const bdata = bctx.createImageData(size, size);
-  const rdata = rctx.createImageData(size, size);
+  const bdata = bctx.createImageData(colorOnly ? 1 : size, colorOnly ? 1 : size);
+  const rdata = rctx.createImageData(colorOnly ? 1 : size, colorOnly ? 1 : size);
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
       const s = sample((x + 0.5) / size, (y + 0.5) / size);
@@ -124,6 +125,7 @@ function paint(size: number, sample: (u: number, v: number) => Sample): { color:
       cdata.data[i + 1] = s.c[1];
       cdata.data[i + 2] = s.c[2];
       cdata.data[i + 3] = 255;
+      if (colorOnly) continue;
       const h = Math.max(0, Math.min(255, s.h * 255));
       bdata.data[i] = bdata.data[i + 1] = bdata.data[i + 2] = h;
       bdata.data[i + 3] = 255;
@@ -133,8 +135,10 @@ function paint(size: number, sample: (u: number, v: number) => Sample): { color:
     }
   }
   cctx.putImageData(cdata, 0, 0);
-  bctx.putImageData(bdata, 0, 0);
-  rctx.putImageData(rdata, 0, 0);
+  if (!colorOnly) {
+    bctx.putImageData(bdata, 0, 0);
+    rctx.putImageData(rdata, 0, 0);
+  }
   return { color, bump, rough };
 }
 
@@ -267,10 +271,10 @@ function wallSampler(style: WallStyle, base: Rgb): { tile: number; sample: (u: n
   }
 }
 
-export function makeWallMaps(style: WallStyle, baseHex: string, size: number, anisotropy: number): SurfaceMaps {
+export function makeWallMaps(style: WallStyle, baseHex: string, size: number, anisotropy: number, colorOnly = false): SurfaceMaps {
   const base = hexToRgb(baseHex);
   const { tile, sample } = wallSampler(style, base);
-  return toTextures(paint(size, sample), tile, anisotropy);
+  return toTextures(paint(size, sample, colorOnly), tile, anisotropy);
 }
 
 // ---- floor styles --------------------------------------------------------
@@ -370,17 +374,17 @@ function floorSampler(style: FloorStyle, base: Rgb): { tile: number; sample: (u:
   }
 }
 
-export function makeFloorMaps(style: FloorStyle, baseHex: string, size: number, anisotropy: number): SurfaceMaps {
+export function makeFloorMaps(style: FloorStyle, baseHex: string, size: number, anisotropy: number, colorOnly = false): SurfaceMaps {
   const base = hexToRgb(baseHex);
   const { tile, sample } = floorSampler(style, base);
-  return toTextures(paint(size, sample), tile, anisotropy);
+  return toTextures(paint(size, sample, colorOnly), tile, anisotropy);
 }
 
 // ---- decorations ---------------------------------------------------------
 
 /** Plush carpet pile in a given color (used for runners and rugs). */
-export function makePileMaps(colorHex: string, size: number, anisotropy: number): SurfaceMaps {
-  return makeFloorMaps("carpet", colorHex, size, anisotropy);
+export function makePileMaps(colorHex: string, size: number, anisotropy: number, colorOnly = false): SurfaceMaps {
+  return makeFloorMaps("carpet", colorHex, size, anisotropy, colorOnly);
 }
 
 /** A rug face with a border and medallion; `persian` is ornate, otherwise geometric. */

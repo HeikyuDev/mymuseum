@@ -2,6 +2,7 @@
 
 import { useThree } from "@react-three/fiber";
 import { useEffect } from "react";
+import { perfStore } from "./perf-store";
 
 /**
  * Compiles every material before the first frame. `compileAsync` uses the
@@ -19,7 +20,12 @@ export function ShaderWarmup({ onDone }: { onDone: () => void }) {
       if (!cancelled) onDone();
     };
     // Falls back to a synchronous compile when parallel compilation is unavailable.
-    gl.compileAsync(scene, camera).then(finish, finish);
+    const started = performance.now();
+    const done = () => {
+      perfStore.compileMs = performance.now() - started;
+      finish();
+    };
+    gl.compileAsync(scene, camera).then(done, done);
     return () => {
       cancelled = true;
     };

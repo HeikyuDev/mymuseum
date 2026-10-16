@@ -7,6 +7,7 @@ import type { QualitySettings } from "@/lib/gallery/quality";
 import type { SceneMood, ZoneLook } from "@/lib/gallery/scene-look";
 import type { GalleryZone } from "@/lib/gallery/zones";
 import type { CanvasFonts } from "@/lib/fonts-client";
+import type { Resources } from "./resources";
 import type { SurfaceCache } from "./surface-cache";
 
 export type GalleryContextValue = {
@@ -17,6 +18,10 @@ export type GalleryContextValue = {
   quality: QualitySettings;
   fonts: CanvasFonts;
   surfaces: SurfaceCache;
+  /** Shared geometries and materials (disposed with the scene). */
+  resources: Resources;
+  /** Baked light and shade textures shared by every artwork and wall. */
+  baked: { glow: CanvasTexture; edgeShade: CanvasTexture; floorSheen: CanvasTexture };
   /** Neutral stand-in used until a photo arrives, so the photo shader never has to be recompiled. */
   placeholderPhoto: CanvasTexture;
   softShadow: CanvasTexture;

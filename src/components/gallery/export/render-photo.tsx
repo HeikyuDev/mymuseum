@@ -7,6 +7,7 @@ import { composePhoto } from "@/lib/photo/compose";
 import { PHOTO_FORMATS, type PhotoFormatId } from "@/lib/photo/formats";
 import type { ViewerMuseum } from "@/lib/viewer-model";
 import type { LightingPreset } from "@/types/database";
+import { detectDeviceTier } from "../device";
 import { buildGalleryModel, GalleryScene, focusArtworkOf } from "../GalleryScene";
 import { finishPhoto } from "./finish";
 
@@ -53,7 +54,7 @@ async function renderOnce(request: PhotoRequest, supersample: number): Promise<H
 
   const base = buildGalleryModel(museum);
   const model = request.lighting
-    ? { ...base, looks: base.looks.map((look) => ({ ...look, lighting: lightingPreset(request.lighting!) })) }
+    ? { ...base, looks: base.looks.map((look) => ({ ...look, lighting: lightingPreset(request.lighting!, look.lightMode, look.brightness) })) }
     : base;
   const placement = model.layout.artworks.find((item) => item.id === artworkId);
   const stopIndex = model.layout.stops.findIndex((stop) => stop.kind === "artwork" && stop.artworkIndex === placement?.index);
@@ -190,7 +191,9 @@ async function renderOnce(request: PhotoRequest, supersample: number): Promise<H
  * Falls back to lower supersampling when the device runs out of memory.
  */
 export async function renderMuseumPhoto(request: PhotoRequest): Promise<HTMLCanvasElement> {
-  const ladder = [request.supersample, 1.25, 1].filter((value, index, all) => value <= request.supersample && all.indexOf(value) === index);
+  // Weak devices start at 1x: a supersampled Story render can exhaust their memory.
+  const supersample = detectDeviceTier() === "low" ? Math.min(request.supersample, 1) : request.supersample;
+  const ladder = [supersample, 1.25, 1].filter((value, index, all) => value <= supersample && all.indexOf(value) === index);
   let lastError: unknown = null;
   for (const supersample of ladder) {
     try {

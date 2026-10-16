@@ -2,79 +2,104 @@
 
 import { useThree } from "@react-three/fiber";
 import { useEffect, useState } from "react";
-import { CanvasTexture, DefaultLoadingManager, LinearMipmapLinearFilter, SRGBColorSpace, type Texture } from "three";
+import { DefaultLoadingManager, type Texture } from "three";
+import { loadPhotoTexture } from "./photo-loader";
 
 export type PhotoTexture = { texture: Texture; width: number; height: number };
 export type PhotoStatus = "idle" | "loading" | "ready" | "error";
 
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.crossOrigin = "anonymous"; // keeps WebGL and exported canvases untainted
-    image.decoding = "async";
-    // decode() makes sure vector images are rasterizable before they are drawn to a canvas.
-    image.onload = () => void image.decode().catch(() => undefined).then(() => resolve(image));
-    image.onerror = () => reject(new Error("image failed to load"));
-    image.src = url;
-  });
-}
+type Options = {
+  url: string;
+  /** Small copy of the photo; tried first and silently skipped when it does not exist. */
+  thumbUrl?: string | null;
+  /** The artwork is near the camera: load something. */
+  enabled: boolean;
+  /** The camera rests on this artwork: load the full image. */
+  upgrade: boolean;
+  /** Longest side of the full image on the GPU. */
+  maxSize: number;
+  /** Longest side when only a neighbour needs the original (no thumbnail available). */
+  neighbourSize: number;
+  anisotropy: number;
+  maxLoads: number;
+  /** Counts toward the loading screen. */
+  blocking: boolean;
+};
+
+type Loaded = { key: string; photo: PhotoTexture };
 
 /**
- * Loads a photo as a GPU texture: sRGB, mipmapped, anisotropic and limited to
- * `maxSize` on its longest side (so a 6000px upload never costs 140 MB of VRAM).
- * When `enabled` turns false the texture is disposed.
+ * Loads a photo as a GPU texture in two stages: the thumbnail first (and for neighbours),
+ * then the full image only for the artwork the camera rests on. Textures are disposed when the
+ * artwork leaves the loading window; decoding happens off the main thread.
  */
-export function usePhotoTexture(url: string, enabled: boolean, maxSize: number, anisotropy: number): { photo: PhotoTexture | null; status: PhotoStatus } {
-  const [result, setResult] = useState<PhotoTexture | null>(null);
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+export function usePhotoTexture({ url, thumbUrl, enabled, upgrade, maxSize, neighbourSize, anisotropy, maxLoads, blocking }: Options): { photo: PhotoTexture | null; status: PhotoStatus } {
   const invalidate = useThree((state) => state.invalidate);
   const maxAnisotropy = useThree((state) => state.gl.capabilities.getMaxAnisotropy());
+  const aniso = Math.min(anisotropy, maxAnisotropy);
+  const [small, setSmall] = useState<Loaded | null>(null);
+  const [full, setFull] = useState<Loaded | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
 
+  // Stage 1: the thumbnail, or the capped original when there is none (or it 404s).
   useEffect(() => {
     if (!enabled) return;
-    let cancelled = false;
+    const controller = new AbortController();
     let created: Texture | null = null;
-    DefaultLoadingManager.itemStart(url);
-    loadImage(url)
-      .then((image) => {
-        if (cancelled) return;
-        const width = image.naturalWidth || image.width;
-        const height = image.naturalHeight || image.height;
-        const longest = Math.max(width, height);
-        // Always rasterize through a canvas: it caps the size and also makes SVG sources upload reliably.
-        const scale = Math.min(1, maxSize / longest);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, Math.round(width * scale));
-        canvas.height = Math.max(1, Math.round(height * scale));
-        const ctx = canvas.getContext("2d");
-        if (!ctx) throw new Error("canvas unavailable");
-        ctx.fillStyle = "#ffffff"; // transparent images (PNG, SVG) read as a white sheet, not black
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-        const texture = new CanvasTexture(canvas);
-        texture.colorSpace = SRGBColorSpace;
-        texture.anisotropy = Math.min(anisotropy, maxAnisotropy);
-        texture.generateMipmaps = true;
-        texture.minFilter = LinearMipmapLinearFilter;
-        texture.needsUpdate = true;
-        created = texture;
-        setResult({ texture, width, height });
+    const hasThumb = Boolean(thumbUrl);
+    if (blocking) DefaultLoadingManager.itemStart(url);
+    const first = hasThumb ? loadPhotoTexture(thumbUrl as string, neighbourSize, aniso, maxLoads, controller.signal) : Promise.reject(new Error("no thumbnail"));
+    first
+      .catch(() => loadPhotoTexture(url, neighbourSize, aniso, maxLoads, controller.signal))
+      .then((loaded) => {
+        if (controller.signal.aborted) {
+          loaded.texture.dispose();
+          return;
+        }
+        created = loaded.texture;
+        setSmall({ key: url, photo: loaded });
         invalidate();
       })
       .catch(() => {
-        // A missing photo simply stays a blank canvas on the wall.
-        if (!cancelled) setFailedUrl(url);
+        if (!controller.signal.aborted) setFailed(url);
       })
-      .finally(() => DefaultLoadingManager.itemEnd(url));
+      .finally(() => {
+        if (blocking) DefaultLoadingManager.itemEnd(url);
+      });
     return () => {
-      cancelled = true;
+      controller.abort();
       created?.dispose();
-      setResult(null);
+      setSmall(null);
     };
-  }, [url, enabled, maxSize, anisotropy, maxAnisotropy, invalidate]);
+  }, [url, thumbUrl, enabled, neighbourSize, aniso, maxLoads, blocking, invalidate]);
 
-  const photo = enabled ? result : null;
-  const status: PhotoStatus = !enabled ? "idle" : photo ? "ready" : failedUrl === url ? "error" : "loading";
+  // Stage 2: the full image, only while the camera rests here. Artworks without a thumbnail
+  // upgrade from their capped original the same way.
+  const wantFull = enabled && upgrade;
+  useEffect(() => {
+    if (!wantFull) return;
+    const controller = new AbortController();
+    let created: Texture | null = null;
+    loadPhotoTexture(url, maxSize, aniso, maxLoads, controller.signal)
+      .then((loaded) => {
+        if (controller.signal.aborted) {
+          loaded.texture.dispose();
+          return;
+        }
+        created = loaded.texture;
+        setFull({ key: url, photo: loaded });
+        invalidate();
+      })
+      .catch(() => undefined);
+    return () => {
+      controller.abort();
+      created?.dispose();
+      setFull(null);
+      invalidate();
+    };
+  }, [wantFull, url, maxSize, aniso, maxLoads, invalidate]);
+
+  const photo = enabled ? ((wantFull && full?.key === url ? full.photo : null) ?? (small?.key === url ? small.photo : null)) : null;
+  const status: PhotoStatus = !enabled ? "idle" : photo ? "ready" : failed === url ? "error" : "loading";
   return { photo, status };
 }

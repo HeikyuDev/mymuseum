@@ -10,6 +10,8 @@ export class SurfaceCache {
   constructor(
     private readonly size: number,
     private readonly anisotropy: number,
+    /** Skip bump and roughness maps (the cheap tier uses unlit-by-PBR Lambert materials). */
+    private readonly colorOnly = false,
   ) {}
 
   private surface(key: string, create: () => SurfaceMaps): SurfaceMaps {
@@ -22,20 +24,20 @@ export class SurfaceCache {
   }
 
   wall(style: WallStyle, color: string): SurfaceMaps {
-    return this.surface(`wall:${style}:${color}`, () => makeWallMaps(style, color, this.size, this.anisotropy));
+    return this.surface(`wall:${style}:${color}`, () => makeWallMaps(style, color, this.size, this.anisotropy, this.colorOnly));
   }
 
   floor(style: FloorStyle, color: string): SurfaceMaps {
-    return this.surface(`floor:${style}:${color}`, () => makeFloorMaps(style, color, this.size, this.anisotropy));
+    return this.surface(`floor:${style}:${color}`, () => makeFloorMaps(style, color, this.size, this.anisotropy, this.colorOnly));
   }
 
   pile(color: string): SurfaceMaps {
-    return this.surface(`pile:${color}`, () => makePileMaps(color, Math.min(this.size, 512), this.anisotropy));
+    return this.surface(`pile:${color}`, () => makePileMaps(color, Math.min(this.size, 512), this.anisotropy, this.colorOnly));
   }
 
   /** Wood used for frames, tinted by the frame color. */
   wood(color: string): SurfaceMaps {
-    return this.surface(`wood:${color}`, () => makeFloorMaps("dark_wood", color, Math.min(this.size, 512), this.anisotropy));
+    return this.surface(`wood:${color}`, () => makeFloorMaps("dark_wood", color, Math.min(this.size, 512), this.anisotropy, this.colorOnly));
   }
 
   rug(color: string, persian: boolean): Texture {

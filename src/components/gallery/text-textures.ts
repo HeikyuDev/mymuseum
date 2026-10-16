@@ -188,3 +188,53 @@ export function makeLightPoolTexture(color: string): CanvasTexture {
   texture.colorSpace = SRGBColorSpace;
   return texture;
 }
+
+/** Soft white radial wash used as a baked stand-in for a spotlight's pool on the wall (additive). */
+export function makeWallGlowTexture(size = 128): CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, "rgba(255,246,226,0.95)");
+  gradient.addColorStop(0.45, "rgba(255,246,226,0.35)");
+  gradient.addColorStop(1, "rgba(255,246,226,0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+
+/** Vertical black gradient (alpha from `top` to `bottom`): baked ambient occlusion along junctions. */
+export function makeEdgeShadeTexture(top: number, bottom: number): CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 4;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createLinearGradient(0, 0, 0, 64);
+  gradient.addColorStop(0, `rgba(0,0,0,${top})`);
+  gradient.addColorStop(1, `rgba(0,0,0,${bottom})`);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 4, 64);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+
+/** Soft vertical sheen used as a fake floor reflection on glossy floors (additive). */
+export function makeFloorSheenTexture(): CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 4;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createLinearGradient(0, 0, 0, 64);
+  gradient.addColorStop(0, "rgba(255,250,240,0.0)");
+  gradient.addColorStop(0.35, "rgba(255,250,240,0.22)");
+  gradient.addColorStop(1, "rgba(255,250,240,0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 4, 64);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}

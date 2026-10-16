@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sceneMood } from "@/lib/gallery/scene-look";
 import { useI18n } from "@/lib/i18n/provider";
 import type { ViewerMuseum } from "@/lib/viewer-model";
-import { qualityFor, useDeviceProfile } from "./device";
+import { QUALITY } from "@/lib/gallery/quality";
+import { useDeviceProfile } from "./device";
 import { GalleryCanvas } from "./GalleryCanvas";
 import { buildGalleryModel } from "./GalleryScene";
 import { useCanvasFonts } from "./use-canvas-fonts";
@@ -52,7 +53,7 @@ export function GalleryEmbed({ museum, stopIndex, label, className = "" }: Props
           preset={museum.theme.preset}
           accent={museum.theme.accent}
           fonts={fonts}
-          quality={qualityFor(device)}
+          quality={QUALITY[device.tier]}
           otherLabel={t("viewer.other")}
           stopIndex={safeStop}
           reducedMotion={device.reducedMotion}

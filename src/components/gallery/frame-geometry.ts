@@ -132,9 +132,14 @@ export function sweepGeometry(openW: number, openH: number, profile: readonly Pr
 }
 
 /** Frame moulding for a style, or null for styles without one (canvas, glass). */
-export function frameGeometry(style: FrameStyle, openW: number, openH: number): BufferGeometry | null {
+export function frameGeometry(style: FrameStyle, openW: number, openH: number, simple = false): BufferGeometry | null {
   const profile = FRAME_PROFILES[style];
   if (!profile) return null;
+  // Cheap tier: a plain raised box profile instead of the multi-step moulding.
+  if (simple) {
+    const depth = FRAME_SPECS[style].depth;
+    return sweepGeometry(openW, openH, [[0, depth * 0.75], [0.003, depth], [FRAME_SPECS[style].pad - 0.003, depth]], FRAME_SPECS[style].pad);
+  }
   return sweepGeometry(openW, openH, profile, FRAME_SPECS[style].pad);
 }
 

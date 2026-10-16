@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import { WALL_HEIGHT, buildLayout, type MuseumLayout } from "@/lib/gallery/layout";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { buildLayout, type MuseumLayout } from "@/lib/gallery/layout";
 import { zoneLook, sceneMood, isDarkColor, type ZoneLook } from "@/lib/gallery/scene-look";
 import { toLayoutZones, galleryZones, type GalleryZone } from "@/lib/gallery/zones";
 import type { QualitySettings } from "@/lib/gallery/quality";
@@ -10,11 +10,14 @@ import type { ViewerMuseum } from "@/lib/viewer-model";
 import type { ThemePreset } from "@/types/database";
 import { Artwork } from "./Artwork";
 import { CameraRail, type FixedCamera } from "./CameraRail";
+import { CeilingTrack } from "./CeilingTrack";
+import { Culler } from "./Culler";
 import { GalleryProvider, zoneTitle, useGallery, type GalleryContextValue } from "./context";
 import { Lighting } from "./Lighting";
 import { Portal, PORTAL_SEGMENT_WIDTH } from "./Portal";
+import { Resources } from "./resources";
 import { SurfaceCache } from "./surface-cache";
-import { makeInscriptionTexture, makePlaceholderTexture, makeSoftShadowTexture } from "./text-textures";
+import { makeEdgeShadeTexture, makeFloorSheenTexture, makeInscriptionTexture, makePlaceholderTexture, makeSoftShadowTexture, makeWallGlowTexture } from "./text-textures";
 import { ShaderWarmup } from "./ShaderWarmup";
 import { Zone } from "./Zone";
 
@@ -61,6 +64,8 @@ export type GallerySceneProps = {
   onCompiled?: () => void;
   onArrive?: (stopIndex: number) => void;
   telemetry?: (sample: { x: number; z: number; t: number; target?: number; smooth?: number }) => void;
+  /** Extra scene children (the performance governor and the diagnostics probe). */
+  extras?: ReactNode;
 };
 
 /** Everything inside the canvas: lights, camera rail, zones, portals and artworks. */
@@ -84,11 +89,23 @@ export function GalleryScene({
   onCompiled,
   onArrive,
   telemetry,
+  extras,
 }: GallerySceneProps) {
   const cameraX = useRef(0);
   const mood = useMemo(() => sceneMood(preset), [preset]);
-  const surfaces = useMemo(() => new SurfaceCache(quality.surfaceTextureSize, quality.anisotropy), [quality.surfaceTextureSize, quality.anisotropy]);
+  const surfaces = useMemo(() => new SurfaceCache(quality.surfaceTextureSize, quality.anisotropy, quality.simpleMaterials), [quality.surfaceTextureSize, quality.anisotropy, quality.simpleMaterials]);
   useEffect(() => () => surfaces.dispose(), [surfaces]);
+  const resources = useMemo(() => new Resources(quality.simpleMaterials), [quality.simpleMaterials]);
+  useEffect(() => () => resources.dispose(), [resources]);
+  const baked = useMemo(() => ({ glow: makeWallGlowTexture(), edgeShade: makeEdgeShadeTexture(0, 0.35), floorSheen: makeFloorSheenTexture() }), []);
+  useEffect(
+    () => () => {
+      baked.glow.dispose();
+      baked.edgeShade.dispose();
+      baked.floorSheen.dispose();
+    },
+    [baked],
+  );
   const softShadow = useMemo(() => makeSoftShadowTexture(), []);
   useEffect(() => () => softShadow.dispose(), [softShadow]);
   const placeholderPhoto = useMemo(() => makePlaceholderTexture(), []);
@@ -104,6 +121,8 @@ export function GalleryScene({
       quality,
       fonts,
       surfaces,
+      resources,
+      baked,
       placeholderPhoto,
       softShadow,
       museumTitle,
@@ -115,7 +134,7 @@ export function GalleryScene({
       onPhotoSettled,
       snapshot,
     }),
-    [model, mood, quality, fonts, surfaces, placeholderPhoto, softShadow, museumTitle, accent, otherLabel, focusArtwork, onSelectArtwork, onPhotoSettled, snapshot],
+    [model, mood, quality, fonts, surfaces, resources, baked, placeholderPhoto, softShadow, museumTitle, accent, otherLabel, focusArtwork, onSelectArtwork, onPhotoSettled, snapshot],
   );
 
   const { layout, zones, looks } = model;
@@ -147,7 +166,7 @@ export function GalleryScene({
           <group key={zone.id}>
             <Zone zoneIndex={i} floorRange={[floorStart, end]} wallRanges={wallRanges} layout={layout} isFirst={i === 0} isLast={i === last} look={looks[i]} />
             <Portal x={span.portalX} title={zoneTitle(zone, otherLabel)} look={looks[i]} />
-            {quality.props ? <CeilingTrack range={[floorStart, end]} xs={layout.artworks.filter((a) => a.zoneIndex === i).map((a) => a.x)} /> : null}
+            {quality.props ? <CeilingTrack range={[floorStart, end]} xs={layout.artworks.filter((a) => a.zoneIndex === i).map((a) => a.x)} lit={looks[i].lighting.spots} /> : null}
           </group>
         );
       })}
@@ -160,6 +179,8 @@ export function GalleryScene({
         />
       ))}
       {zones.length > 0 ? <LobbyTitle /> : null}
+      <Culler />
+      {extras}
       {onCompiled ? <ShaderWarmup onDone={onCompiled} /> : null}
     </GalleryProvider>
   );
@@ -188,29 +209,5 @@ function LobbyTitle() {
       <planeGeometry args={[5.2, 1.04]} />
       <meshBasicMaterial map={texture} transparent depthWrite={false} toneMapped={false} />
     </mesh>
-  );
-}
-
-function CeilingTrack({ range, xs }: { range: readonly [number, number]; xs: number[] }) {
-  const length = range[1] - range[0];
-  return (
-    <group>
-      <mesh position={[(range[0] + range[1]) / 2, WALL_HEIGHT - 0.03, 2.5]}>
-        <boxGeometry args={[length, 0.05, 0.06]} />
-        <meshStandardMaterial color="#2b2926" roughness={0.5} metalness={0.4} />
-      </mesh>
-      {xs.map((x) => (
-        <group key={x} position={[x, WALL_HEIGHT - 0.2, 2.5]} rotation={[-0.62, 0, 0]}>
-          <mesh>
-            <cylinderGeometry args={[0.055, 0.07, 0.2, 18]} />
-            <meshStandardMaterial color="#1f1d1b" roughness={0.45} metalness={0.5} />
-          </mesh>
-          <mesh position={[0, -0.103, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <circleGeometry args={[0.052, 18]} />
-            <meshBasicMaterial color="#fff3d4" toneMapped={false} />
-          </mesh>
-        </group>
-      ))}
-    </group>
   );
 }

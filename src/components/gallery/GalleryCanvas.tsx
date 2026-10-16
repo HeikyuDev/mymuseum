@@ -4,6 +4,7 @@ import { Canvas } from "@react-three/fiber";
 import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace } from "three";
 import type { QualitySettings } from "@/lib/gallery/quality";
 import { GalleryScene, type GallerySceneProps } from "./GalleryScene";
+import { isPerfDebug } from "./perf-store";
 
 type Props = Omit<GallerySceneProps, "quality"> & {
   quality: QualitySettings;
@@ -30,7 +31,7 @@ export function GalleryCanvas({ quality, interactive = true, frameloop = "demand
       style={{ touchAction: "pan-y", pointerEvents: interactive ? "auto" : "none" }}
       onCreated={(state) => {
         const { gl } = state;
-        if (process.env.NODE_ENV !== "production") (window as unknown as { __galleryState?: unknown }).__galleryState = state;
+        if (process.env.NODE_ENV !== "production" || isPerfDebug()) (window as unknown as { __galleryState?: unknown }).__galleryState = state;
         gl.toneMapping = ACESFilmicToneMapping;
         gl.outputColorSpace = SRGBColorSpace;
         const canvas = gl.domElement;

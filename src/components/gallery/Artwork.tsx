@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { DoubleSide, type Texture } from "three";
+import { BoxGeometry, DoubleSide, PlaneGeometry } from "three";
 import { DEFAULT_MAT_COLOR, FRAME_DEFAULT_COLOR } from "@/lib/scene-palette";
 import { FRAME_SPECS } from "@/lib/gallery/frame-specs";
 import type { ArtworkPlacement } from "@/lib/gallery/layout";
+import { photoLevel } from "@/lib/gallery/scene-look";
 import type { ViewerArtwork } from "@/lib/viewer-model";
 import type { FrameStyle } from "@/types/database";
 import { useGallery } from "./context";
 import { frameGeometry, matGeometry } from "./frame-geometry";
+import { flipPlaneUv } from "./photo-loader";
 import { makePlaqueTexture } from "./text-textures";
 import { usePhotoTexture } from "./use-photo-texture";
 
@@ -19,24 +21,39 @@ type FrameMaterial = { color: string; metalness: number; roughness: number; envM
 function frameMaterial(style: FrameStyle, color: string): FrameMaterial {
   switch (style) {
     case "gold":
-      return { color, metalness: 1, roughness: 0.3, envMapIntensity: 1.6, wood: false };
+      return { color, metalness: 1, roughness: 0.34, envMapIntensity: 1.3, wood: false };
     case "vintage_ornate":
-      return { color, metalness: 0.95, roughness: 0.42, envMapIntensity: 1.3, wood: false };
+      return { color, metalness: 0.95, roughness: 0.45, envMapIntensity: 1.1, wood: false };
     case "metallic":
-      return { color, metalness: 1, roughness: 0.32, envMapIntensity: 1.5, wood: false };
+      return { color, metalness: 1, roughness: 0.36, envMapIntensity: 1.2, wood: false };
     case "wood":
-      return { color: "#ffffff", metalness: 0, roughness: 0.55, envMapIntensity: 0.5, wood: true };
+      return { color: "#ffffff", metalness: 0, roughness: 0.65, envMapIntensity: 0.35, wood: true };
     case "black_gallery":
-      return { color, metalness: 0.2, roughness: 0.42, envMapIntensity: 0.9, wood: false };
+      return { color, metalness: 0.2, roughness: 0.5, envMapIntensity: 0.7, wood: false };
     default:
-      return { color, metalness: 0, roughness: 0.6, envMapIntensity: 0.4, wood: false };
+      return { color, metalness: 0, roughness: 0.7, envMapIntensity: 0.3, wood: false };
   }
 }
 
+const mm = (value: number) => value.toFixed(3);
+
 export function Artwork({ placement, artwork, wallIsDark }: Props) {
-  const { quality, fonts, softShadow, surfaces, placeholderPhoto, focusArtwork, onSelectArtwork, onPhotoSettled, snapshot } = useGallery();
-  const active = Math.abs(placement.index - focusArtwork) <= quality.loadRadius;
-  const { photo, status } = usePhotoTexture(artwork.imageUrl, active, quality.photoTextureMax, quality.anisotropy);
+  const { quality, fonts, softShadow, surfaces, resources, baked, looks, placeholderPhoto, focusArtwork, onSelectArtwork, onPhotoSettled, snapshot } = useGallery();
+  const look = looks[placement.zoneIndex];
+  const distance = Math.abs(placement.index - focusArtwork);
+  const active = distance <= quality.loadRadius;
+  const { photo, status } = usePhotoTexture({
+    url: artwork.imageUrl,
+    // Photo exports always render the original: a thumbnail would blur the picture.
+    thumbUrl: snapshot ? null : artwork.thumbUrl,
+    enabled: active,
+    upgrade: !snapshot && quality.upgradeFocus && distance === 0,
+    maxSize: quality.photoTextureMax,
+    neighbourSize: snapshot ? quality.photoTextureMax : Math.min(1024, quality.photoTextureMax),
+    anisotropy: quality.anisotropy,
+    maxLoads: quality.maxLoads,
+    blocking: distance <= 1,
+  });
   useEffect(() => {
     if (status === "ready") onPhotoSettled?.(placement.index, true);
     else if (status === "error") onPhotoSettled?.(placement.index, false);
@@ -46,14 +63,43 @@ export function Artwork({ placement, artwork, wallIsDark }: Props) {
   const spec = FRAME_SPECS[frameStyle];
   const frameColor = artwork.frameColor ?? FRAME_DEFAULT_COLOR[frameStyle];
   const matColor = artwork.matColor ?? DEFAULT_MAT_COLOR;
+  const shine = look.lighting.shine;
+  const shadows = quality.shadows;
 
-  const frame = useMemo(() => (spec.kind === "profile" ? frameGeometry(frameStyle, openingW, openingH) : null), [spec.kind, frameStyle, openingW, openingH]);
-  const mat = useMemo(() => (matW > 0 ? matGeometry(imageW, imageH, matW) : null), [matW, imageW, imageH]);
-  useEffect(() => () => frame?.dispose(), [frame]);
-  useEffect(() => () => mat?.dispose(), [mat]);
+  const frame = useMemo(
+    () =>
+      spec.kind === "profile"
+        ? resources.geometry(`frame:${quality.simpleFrames ? "s" : "f"}:${frameStyle}:${mm(openingW)}x${mm(openingH)}`, () => frameGeometry(frameStyle, openingW, openingH, quality.simpleFrames)!)
+        : null,
+    [spec.kind, frameStyle, openingW, openingH, quality.simpleFrames, resources],
+  );
+  const mat = useMemo(() => (matW > 0 ? resources.geometry(`mat:${mm(imageW)}x${mm(imageH)}:${mm(matW)}`, () => matGeometry(imageW, imageH, matW)) : null), [matW, imageW, imageH, resources]);
+  const photoPlane = useMemo(
+    () =>
+      resources.geometry(`photo:${mm(imageW)}x${mm(imageH)}`, () => {
+        const geometry = new PlaneGeometry(imageW, imageH);
+        flipPlaneUv(geometry.getAttribute("uv"));
+        return geometry;
+      }),
+    [imageW, imageH, resources],
+  );
 
   const material = frameMaterial(frameStyle, frameColor);
   const woodMaps = material.wood ? surfaces.wood(frameColor) : null;
+  const frameMat = resources.surface(`frame:${frameStyle}:${frameColor}:${shine}`, {
+    color: material.color,
+    metalness: material.metalness,
+    roughness: material.roughness,
+    envMapIntensity: material.envMapIntensity,
+    shine,
+    map: woodMaps?.color,
+    bumpMap: woodMaps?.bump,
+    bumpScale: 0.6,
+    roughnessMap: woodMaps?.rough,
+    side: DoubleSide,
+  });
+  const matMaterial = resources.surface(`mat:${matColor}`, { color: matColor, roughness: 0.95, side: DoubleSide });
+  const backing = resources.surface(`backing:${matColor}`, { color: matColor, roughness: 0.9 });
 
   const plaqueTone = wallIsDark ? "ink" : "ivory";
   const plaqueAspect = placement.plaque.w / placement.plaque.h;
@@ -65,23 +111,48 @@ export function Artwork({ placement, artwork, wallIsDark }: Props) {
 
   const photoZ = spec.kind === "glass" ? 0.034 : spec.kind === "canvas" ? depth + 0.0008 : 0.004;
   const float = spec.kind === "glass" ? 0.034 : 0;
-  const shadowSize = [outerW + 0.34, outerH + 0.34] as const;
+  const shadowW = outerW + 0.34;
+  const shadowH = outerH + 0.34;
   const shadowOffset = spec.kind === "glass" ? [0.04, -0.08] : [0.025, -0.055];
+  const shadowGeometry = resources.geometry(`shadow:${mm(shadowW)}x${mm(shadowH)}`, () => new PlaneGeometry(shadowW, shadowH));
+  const shadowOpacity = spec.kind === "glass" ? 0.5 : 0.55;
+  const shadowMaterial = resources.basic(`shadow:${shadowOpacity}`, { color: "#000000", map: softShadow, opacity: shadowOpacity, depthWrite: false });
 
   const px = placement.plaque.x - placement.x;
   const py = placement.plaque.y - placement.y;
   const select = () => onSelectArtwork?.(placement.index);
+  const gray = Math.round(photoLevel(look.lighting) * 255).toString(16).padStart(2, "0");
+  const photoTint = `#${gray}${gray}${gray}`;
+
+  const plaqueBase = quality.simpleMaterials ? null : resources.geometry(`plaque:${mm(placement.plaque.w)}x${mm(placement.plaque.h)}`, () => new BoxGeometry(placement.plaque.w, placement.plaque.h, 0.016));
+  const plaqueBaseMaterial = resources.surface(`plaque:${wallIsDark ? "d" : "l"}`, { color: wallIsDark ? "#16140f" : "#ece7da", roughness: 0.6, metalness: wallIsDark ? 0.3 : 0 });
+  const plaquePlane = useMemo(() => new PlaneGeometry(placement.plaque.w - 0.004, placement.plaque.h - 0.004), [placement.plaque.w, placement.plaque.h]);
+  useEffect(() => () => plaquePlane.dispose(), [plaquePlane]);
+
+  const canvasBox = useMemo(
+    () => (spec.kind === "canvas" ? resources.geometry(`canvas:${mm(imageW)}x${mm(imageH)}:${mm(depth)}`, () => new BoxGeometry(imageW, imageH, depth)) : null),
+    [spec.kind, imageW, imageH, depth, resources],
+  );
+  const canvasMaterial = resources.surface(`canvas:${frameColor}`, { color: frameColor, roughness: 0.9 });
+
+  const glowGeometry = useMemo(
+    () => (quality.baked ? resources.geometry(`glow:${mm(outerW)}x${mm(outerH)}`, () => new PlaneGeometry(outerW * 2.7 + 0.6, outerH * 2.5 + 0.6)) : null),
+    [quality.baked, outerW, outerH, resources],
+  );
+  const glowMaterial = quality.baked && look.lighting.glow > 0 ? resources.basic(`glow:${look.lighting.glow}`, { map: baked.glow, opacity: 0.3 * look.lighting.glow, additive: true }) : null;
+
+  const cullRange = useMemo(() => [placement.x - outerW / 2, placement.x + outerW / 2], [placement.x, outerW]);
 
   return (
-    <group position={[placement.x, placement.y, 0]}>
-      {/* soft contact shadow, always on, so frames never look pasted onto the wall */}
-      <mesh position={[shadowOffset[0], shadowOffset[1], 0.0015]} renderOrder={1}>
-        <planeGeometry args={shadowSize} />
-        <meshBasicMaterial map={softShadow} color="#000000" transparent opacity={spec.kind === "glass" ? 0.5 : 0.62} depthWrite={false} toneMapped={false} />
-      </mesh>
+    <group position={[placement.x, placement.y, 0]} userData={{ cull: cullRange }}>
+      {glowGeometry && glowMaterial ? <mesh geometry={glowGeometry} material={glowMaterial} position={[0, 0.1, 0.001]} renderOrder={1} /> : null}
 
-      {/* the photograph */}
+      {/* soft contact shadow, always on, so frames never look pasted onto the wall */}
+      <mesh geometry={shadowGeometry} material={shadowMaterial} position={[shadowOffset[0], shadowOffset[1], 0.0015]} renderOrder={1} />
+
+      {/* the photograph: unlit and untonemapped, so its colors stay true to the original */}
       <mesh
+        geometry={photoPlane}
         position={[0, 0, photoZ]}
         onClick={(event) => {
           event.stopPropagation();
@@ -94,72 +165,41 @@ export function Artwork({ placement, artwork, wallIsDark }: Props) {
         onPointerOut={() => {
           document.body.style.cursor = "";
         }}
-        receiveShadow
       >
-        <planeGeometry args={[imageW, imageH]} />
-        <PhotoMaterial texture={photo?.texture ?? placeholderPhoto} />
+        <meshBasicMaterial map={photo?.texture ?? placeholderPhoto} color={photoTint} toneMapped={false} />
       </mesh>
 
-      {/* backing board behind mat and photo */}
-      {spec.kind === "profile" ? (
-        <mesh position={[0, 0, 0.002]}>
+      {/* backing board behind the mat */}
+      {spec.kind === "profile" && matW > 0 ? (
+        <mesh position={[0, 0, 0.002]} material={backing}>
           <planeGeometry args={[openingW, openingH]} />
-          <meshStandardMaterial color={matColor} roughness={0.9} />
         </mesh>
       ) : null}
 
-      {mat ? (
-        <mesh geometry={mat} position={[0, 0, 0]} castShadow receiveShadow>
-          <meshStandardMaterial color={matColor} roughness={0.95} side={DoubleSide} />
-        </mesh>
-      ) : null}
+      {mat ? <mesh geometry={mat} material={matMaterial} castShadow={shadows} receiveShadow={shadows} /> : null}
+      {frame ? <mesh geometry={frame} material={frameMat} castShadow={shadows} receiveShadow={shadows} /> : null}
 
-      {frame ? (
-        <mesh geometry={frame} castShadow receiveShadow>
-          <meshStandardMaterial
-            color={material.color}
-            metalness={material.metalness}
-            roughness={material.roughness}
-            envMapIntensity={material.envMapIntensity}
-            map={woodMaps?.color}
-            bumpMap={woodMaps?.bump}
-            bumpScale={0.6}
-            roughnessMap={woodMaps?.rough}
-            side={DoubleSide}
-          />
-        </mesh>
-      ) : null}
+      {canvasBox ? <mesh geometry={canvasBox} material={canvasMaterial} position={[0, 0, depth / 2]} castShadow={shadows} receiveShadow={shadows} /> : null}
 
-      {spec.kind === "canvas" ? (
-        <mesh position={[0, 0, depth / 2]} castShadow receiveShadow>
-          <boxGeometry args={[imageW, imageH, depth]} />
-          <meshStandardMaterial color={frameColor} roughness={0.85} />
-        </mesh>
-      ) : null}
-
-      {spec.kind === "glass" ? <GlassPanel width={imageW} height={imageH} /> : null}
+      {spec.kind === "glass" && !quality.simpleMaterials ? <GlassPanel width={imageW} height={imageH} shine={shine} /> : null}
 
       {/* museum placard: title only */}
       <group position={[px, py, float]}>
-        <mesh position={[0, 0, 0.008]} castShadow receiveShadow>
-          <boxGeometry args={[placement.plaque.w, placement.plaque.h, 0.016]} />
-          <meshStandardMaterial color={wallIsDark ? "#16140f" : "#ece7da"} roughness={0.5} metalness={wallIsDark ? 0.3 : 0} />
-        </mesh>
-        <mesh position={[0, 0, 0.0165]}>
-          <planeGeometry args={[placement.plaque.w - 0.004, placement.plaque.h - 0.004]} />
-          <meshStandardMaterial map={plaqueTexture} roughness={0.42} metalness={wallIsDark ? 0.4 : 0.05} envMapIntensity={0.6} />
+        {plaqueBase ? <mesh geometry={plaqueBase} material={plaqueBaseMaterial} position={[0, 0, 0.008]} castShadow={shadows} receiveShadow={shadows} /> : null}
+        <mesh geometry={plaquePlane} position={[0, 0, plaqueBase ? 0.0165 : 0.004]}>
+          {quality.simpleMaterials ? (
+            <meshBasicMaterial map={plaqueTexture} toneMapped={false} />
+          ) : (
+            <meshStandardMaterial map={plaqueTexture} roughness={0.6} metalness={wallIsDark ? 0.3 : 0} envMapIntensity={0.4 * shine} />
+          )}
         </mesh>
       </group>
     </group>
   );
 }
 
-function PhotoMaterial({ texture }: { texture: Texture }) {
-  // A touch of emissive keeps photographs vivid under gallery light, like a lit print.
-  return <meshStandardMaterial map={texture} emissiveMap={texture} emissive="#ffffff" emissiveIntensity={0.16} roughness={0.6} metalness={0} />;
-}
-
-function GlassPanel({ width, height }: { width: number; height: number }) {
+function GlassPanel({ width, height, shine }: { width: number; height: number; shine: number }) {
+  const { resources } = useGallery();
   const standoff = useMemo(() => {
     const x = width / 2 - 0.035;
     const y = height / 2 - 0.035;
@@ -170,19 +210,16 @@ function GlassPanel({ width, height }: { width: number; height: number }) {
       [x, -y],
     ] as const;
   }, [width, height]);
+  const panel = resources.geometry(`glass:${width.toFixed(3)}x${height.toFixed(3)}`, () => new BoxGeometry(width + 0.012, height + 0.012, 0.01));
+  const pin = resources.geometry("standoff", () => new BoxGeometry(0.022, 0.05, 0.022));
+  const glass = resources.glass(shine);
+  const steel = resources.surface("standoff", { color: "#c9ccd1", metalness: 1, roughness: 0.4, envMapIntensity: 1.1 });
   return (
     <group>
-      {/* acrylic front panel */}
-      <mesh position={[0, 0, 0.044]} castShadow>
-        <boxGeometry args={[width + 0.012, height + 0.012, 0.01]} />
-        <meshPhysicalMaterial color="#ffffff" transparent opacity={0.14} roughness={0.04} metalness={0} clearcoat={1} envMapIntensity={2.4} depthWrite={false} />
-      </mesh>
-      {/* brushed steel standoffs */}
+      {/* acrylic front panel: the only place a sheen is allowed */}
+      <mesh geometry={panel} material={glass} position={[0, 0, 0.044]} />
       {standoff.map(([x, y]) => (
-        <mesh key={`${x}:${y}`} position={[x, y, 0.025]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-          <cylinderGeometry args={[0.011, 0.011, 0.05, 16]} />
-          <meshStandardMaterial color="#c9ccd1" metalness={1} roughness={0.28} envMapIntensity={1.5} />
-        </mesh>
+        <mesh key={`${x}:${y}`} geometry={pin} material={steel} position={[x, y, 0.025]} rotation={[Math.PI / 2, 0, 0]} />
       ))}
     </group>
   );
