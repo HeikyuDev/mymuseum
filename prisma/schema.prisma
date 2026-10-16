@@ -1,0 +1,92 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  role         String    @default("USER")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  museums      Museum[]
+
+  @@map("users")
+}
+
+model Museum {
+  id          String          @id @default(uuid())
+  userId      String          @map("user_id")
+  title       String
+  slug        String          @unique
+  description String?
+  isPublished Boolean         @default(true) @map("is_published")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  settings    MuseumSettings?
+  artworks    Artwork[]
+
+  @@index([slug], name: "idx_museums_slug")
+  @@index([userId], name: "idx_museums_user_id")
+  @@map("museums")
+}
+
+model MuseumSettings {
+  id                 String   @id @default(uuid())
+  museumId           String   @unique @map("museum_id")
+  wallColor          String   @default("#EAEAEA") @map("wall_color")
+  wallTexture        String   @default("plaster_smooth") @map("wall_texture")
+  floorTexture       String   @default("wood_parquet") @map("floor_texture")
+  ceilingColor       String   @default("#FFFFFF") @map("ceiling_color")
+  defaultFrameStyle  String   @default("MINIMALIST") @map("default_frame_style")
+  defaultFrameColor  String   @default("#1A1A1A") @map("default_frame_color")
+  lightingPreset     String   @default("WARM_GALLERY") @map("lighting_preset")
+  ambientIntensity   Float    @default(0.4) @map("ambient_intensity")
+  spotlightIntensity Float    @default(1.2) @map("spotlight_intensity")
+  backgroundMusicUrl String?  @map("background_music_url")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  museum             Museum   @relation(fields: [museumId], references: [id], onDelete: Cascade)
+
+  @@map("museum_settings")
+}
+
+model Artwork {
+  id           String   @id @default(uuid())
+  museumId     String   @map("museum_id")
+  title        String
+  artistName   String   @default("Desconocido") @map("artist_name")
+  description  String?
+  year         Int?
+  imageUrl     String   @map("image_url")
+  thumbnailUrl String?  @map("thumbnail_url")
+  aspectRatio  Float    @default(1.0) @map("aspect_ratio")
+  widthMeters  Float    @default(1.5) @map("width_meters")
+  heightMeters Float    @default(1.5) @map("height_meters")
+  wallIndex    Int      @default(0) @map("wall_index")
+  positionX    Float    @default(0.0) @map("position_x")
+  positionY    Float    @default(1.6) @map("position_y")
+  positionZ    Float    @default(0.0) @map("position_z")
+  rotationY    Float    @default(0.0) @map("rotation_y")
+  frameStyle   String?  @map("frame_style")
+  frameColor   String?  @map("frame_color")
+  sortOrder    Int      @default(0) @map("sort_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  museum       Museum   @relation(fields: [museumId], references: [id], onDelete: Cascade)
+
+  @@index([museumId, isActive], name: "idx_artworks_museum_active")
+  @@index([museumId, wallIndex], name: "idx_artworks_museum_wall")
+  @@map("artworks")
+}
