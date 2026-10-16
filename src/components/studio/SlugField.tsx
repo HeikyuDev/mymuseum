@@ -3,8 +3,10 @@
 import { CheckCircle2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { checkSlugAvailability, type SlugCheck } from "@/app/studio/actions/museum";
-import { validateSlug } from "@/lib/validation/slug";
 import { Field, Spinner } from "@/components/ui/panel";
+import { translateCode } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n/provider";
+import { validateSlug } from "@/lib/validation/slug";
 
 type Props = {
   id: string;
@@ -18,8 +20,9 @@ type Props = {
 };
 
 export function SlugField({ id, value, onChange, currentSlug, onValidityChange, serverError }: Props) {
+  const { t } = useI18n();
   const [result, setResult] = useState<{ slug: string; check: SlugCheck } | null>(null);
-  const localProblem = value ? validateSlug(value) : "Choose an address for your museum.";
+  const localProblem = value ? validateSlug(value) : "slug.choose";
   const unchanged = !!currentSlug && value === currentSlug;
 
   useEffect(() => {
@@ -30,14 +33,14 @@ export function SlugField({ id, value, onChange, currentSlug, onValidityChange, 
         const check = await checkSlugAvailability(value);
         if (!cancelled) setResult({ slug: value, check });
       } catch {
-        if (!cancelled) setResult({ slug: value, check: { available: true, message: "Could not verify availability." } });
+        if (!cancelled) setResult({ slug: value, check: { available: true, message: t("slug.verifyFailed") } });
       }
     }, 400);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [value, localProblem, unchanged]);
+  }, [value, localProblem, unchanged, t]);
 
   const remote = result && result.slug === value ? result.check : null;
   const checking = !localProblem && !unchanged && !remote;
@@ -49,14 +52,14 @@ export function SlugField({ id, value, onChange, currentSlug, onValidityChange, 
 
   let status: { tone: "ok" | "error" | "pending"; message: string };
   if (serverError) status = { tone: "error", message: serverError };
-  else if (localProblem) status = { tone: "error", message: localProblem };
-  else if (unchanged) status = { tone: "ok", message: "This is your current address." };
-  else if (checking) status = { tone: "pending", message: "Checking availability" };
+  else if (localProblem) status = { tone: "error", message: translateCode(t, localProblem) };
+  else if (unchanged) status = { tone: "ok", message: t("slug.current") };
+  else if (checking) status = { tone: "pending", message: t("slug.checking") };
   else status = { tone: remote?.available ? "ok" : "error", message: remote?.message ?? "" };
 
   return (
-    <Field id={id} label="Public address">
-      <div className="flex items-stretch overflow-hidden rounded-theme border border-line bg-raised focus-within:border-accent">
+    <Field id={id} label={t("slug.label")}>
+      <div className="flex items-stretch overflow-hidden rounded-theme border border-line bg-raised focus-within:border-accent" dir="ltr">
         <span className="flex items-center bg-surface px-3 text-sm text-muted select-none">/m/</span>
         <input
           id={id}

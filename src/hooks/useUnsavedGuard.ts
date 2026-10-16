@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-
-const MESSAGE = "You have unsaved changes. Leave this page and discard them?";
+import { useI18n } from "@/lib/i18n/provider";
 
 /**
  * Warns before leaving while `dirty`: tab close / reload (beforeunload) and
@@ -10,6 +9,7 @@ const MESSAGE = "You have unsaved changes. Leave this page and discard them?";
  * navigation events).
  */
 export function useUnsavedGuard(dirty: boolean) {
+  const { t } = useI18n();
   useEffect(() => {
     if (!dirty) return;
 
@@ -23,7 +23,7 @@ export function useUnsavedGuard(dirty: boolean) {
       if (!anchor || anchor.target === "_blank" || anchor.hasAttribute("download")) return;
       const url = new URL(anchor.href, window.location.href);
       if (url.origin !== window.location.origin || url.pathname === window.location.pathname) return;
-      if (!window.confirm(MESSAGE)) {
+      if (!window.confirm(t("unsaved.confirm"))) {
         event.preventDefault();
         event.stopPropagation();
       }
@@ -35,5 +35,5 @@ export function useUnsavedGuard(dirty: boolean) {
       window.removeEventListener("beforeunload", onBeforeUnload);
       document.removeEventListener("click", onClick, true);
     };
-  }, [dirty]);
+  }, [dirty, t]);
 }

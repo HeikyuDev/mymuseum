@@ -5,6 +5,8 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { createArtworks } from "@/app/studio/actions/artworks";
 import { cardClass, Spinner } from "@/components/ui/panel";
+import { translateCode } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n/provider";
 import { ACCEPTED_IMAGE_TYPES, titleFromFileName } from "@/lib/images";
 import { prepareImage } from "@/lib/images-client";
 import { removeFromArtworks, uploadToArtworks } from "@/lib/storage-upload";
@@ -23,6 +25,7 @@ type Props = {
 };
 
 export function UploadPanel({ museumId, halls, hallId, onHallChange, onFinished }: Props) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -48,7 +51,7 @@ export function UploadPanel({ museumId, halls, hallId, onHallChange, onFinished 
         {
           id,
           image_path: path,
-          title: titleFromFileName(file.name),
+          title: titleFromFileName(file.name, t("img.untitled")),
           hall_id: targetHall,
           width_px: prepared.width,
           height_px: prepared.height,
@@ -61,7 +64,9 @@ export function UploadPanel({ museumId, halls, hallId, onHallChange, onFinished 
     } catch (error) {
       // The row was not created: do not leave an orphan file in Storage.
       if (uploadedPath) await removeFromArtworks([uploadedPath]);
-      update(key, { status: "error", error: error instanceof Error ? error.message : "Upload failed." });
+      // Client helpers throw message codes; server errors arrive already localized.
+      const message = error instanceof Error ? translateCode(t, error.message) : t("img.uploadFailed");
+      update(key, { status: "error", error: message });
       return false;
     }
   }
@@ -84,8 +89,8 @@ export function UploadPanel({ museumId, halls, hallId, onHallChange, onFinished 
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batch.length) }, worker));
 
     setBusy(false);
-    if (succeeded > 0) toast.success(`${succeeded} ${succeeded === 1 ? "artwork" : "artworks"} uploaded`);
-    if (succeeded < batch.length) toast.error(`${batch.length - succeeded} could not be uploaded`);
+    if (succeeded > 0) toast.success(succeeded === 1 ? t("art.uploadedOne", { count: succeeded }) : t("art.uploadedOther", { count: succeeded }));
+    if (succeeded < batch.length) toast.error(t("art.uploadFailed", { count: batch.length - succeeded }));
     if (inputRef.current) inputRef.current.value = "";
     onFinished();
   }
@@ -94,11 +99,11 @@ export function UploadPanel({ museumId, halls, hallId, onHallChange, onFinished 
     <section className={`${cardClass} p-4 sm:p-5`} aria-labelledby="upload-heading">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <h2 id="upload-heading" className="font-display text-lg font-semibold">
-          Upload artworks
+          {t("art.uploadTitle")}
         </h2>
         <div className="flex items-center gap-2">
           <label htmlFor="upload-hall" className="text-sm text-muted">
-            Place in
+            {t("art.placeIn")}
           </label>
           <select
             id="upload-hall"
@@ -107,7 +112,7 @@ export function UploadPanel({ museumId, halls, hallId, onHallChange, onFinished 
             disabled={busy}
             className="min-h-10 rounded-theme border border-line bg-raised px-2 text-sm"
           >
-            <option value="">Unassigned</option>
+            <option value="">{t("art.unassigned")}</option>
             {halls.map((hall) => (
               <option key={hall.id} value={hall.id}>
                 {hall.name}
@@ -133,7 +138,7 @@ export function UploadPanel({ museumId, halls, hallId, onHallChange, onFinished 
         }`}
       >
         <ImagePlus aria-hidden className="size-8 text-muted" />
-        <p className="text-sm text-muted">Drag images here, or</p>
+        <p className="text-sm text-muted">{t("art.drag")}</p>
         <input
           ref={inputRef}
           id="upload-input"
@@ -148,9 +153,9 @@ export function UploadPanel({ museumId, halls, hallId, onHallChange, onFinished 
           htmlFor="upload-input"
           className="inline-flex min-h-11 cursor-pointer items-center rounded-theme bg-accent px-4 text-sm font-semibold text-on-accent peer-focus-visible:outline-3 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-disabled:opacity-50"
         >
-          Choose files
+          {t("art.chooseFiles")}
         </label>
-        <p className="text-xs text-muted">JPEG, PNG, WebP or AVIF, up to 10 MB each. Large images are resized to 2400 px.</p>
+        <p className="text-xs text-muted">{t("art.uploadHint")}</p>
       </div>
 
       {items.length > 0 ? (
@@ -166,14 +171,14 @@ export function UploadPanel({ museumId, halls, hallId, onHallChange, onFinished 
               ) : item.status === "done" ? (
                 <span className="flex items-center gap-1.5 text-emerald-700">
                   <CheckCircle2 aria-hidden className="size-4" />
-                  Done
+                  {t("art.done")}
                 </span>
               ) : (
                 <span className="flex w-40 items-center gap-2">
                   <progress
                     value={item.status === "uploading" ? item.progress : item.status === "saving" ? 1 : 0}
                     max={1}
-                    aria-label={`Upload progress for ${item.name}`}
+                    aria-label={t("art.progressAria", { name: item.name })}
                     className="h-2 flex-1 overflow-hidden rounded-full [&::-moz-progress-bar]:bg-accent [&::-webkit-progress-bar]:bg-surface [&::-webkit-progress-value]:bg-accent"
                   />
                   {item.status === "queued" ? null : <Spinner className="size-3.5" />}

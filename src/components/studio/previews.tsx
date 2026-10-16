@@ -41,18 +41,18 @@ function StepButtons({ index, count, onChange }: { index: number; count: number;
 export function HallPreview({ theme, name, style, artworks }: HallPreviewProps) {
   const { t } = useI18n();
   const usingSamples = artworks.length === 0;
-  const shown = useMemo(() => (usingSamples ? sampleViewerArtworks(style.defaultFrameStyle) : artworks), [usingSamples, artworks, style.defaultFrameStyle]);
+  const shown = useMemo(() => (usingSamples ? sampleViewerArtworks(style.defaultFrameStyle, t("art.fallbackTitle")) : artworks), [usingSamples, artworks, style.defaultFrameStyle, t]);
   const [requestedSlot, setSlot] = useState(0);
   const slot = Math.min(requestedSlot, shown.length - 1);
 
   const museum = useMemo(
     () => ({
-      title: name || "Hall",
+      title: name || t("cat.fallbackName"),
       theme,
-      halls: [{ id: "preview", name: name || "Hall", description: null, style, coverUrl: null, artworks: shown }],
+      halls: [{ id: "preview", name: name || t("cat.fallbackName"), description: null, style, coverUrl: null, artworks: shown }],
       otherArtworks: [],
     }),
-    [name, theme, style, shown],
+    [name, theme, style, shown, t],
   );
 
   return (

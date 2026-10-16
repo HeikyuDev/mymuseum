@@ -1,11 +1,13 @@
 "use client";
 
 import { btnPrimary, btnSecondary, Spinner } from "@/components/ui/panel";
+import { useI18n } from "@/lib/i18n/provider";
 
 type Props = { dirty: boolean; pending: boolean; onSave: () => void; onDiscard: () => void; saveLabel: string };
 
 /** Sticky bar that fades in when a form has unsaved changes. Reserves its space to avoid layout shift. */
 export function SaveBar({ dirty, pending, onSave, onDiscard, saveLabel }: Props) {
+  const { t } = useI18n();
   return (
     <div
       className={`sticky bottom-16 z-20 mt-6 flex items-center justify-between gap-3 rounded-theme border border-line bg-raised px-4 py-3 shadow-lg transition md:bottom-4 ${
@@ -14,11 +16,11 @@ export function SaveBar({ dirty, pending, onSave, onDiscard, saveLabel }: Props)
       aria-hidden={!dirty}
     >
       <p className="text-sm font-medium" role="status">
-        {dirty ? "You have unsaved changes." : ""}
+        {dirty ? t("unsaved.bar") : ""}
       </p>
       <div className="flex gap-2">
         <button type="button" className={btnSecondary} onClick={onDiscard} disabled={pending || !dirty} tabIndex={dirty ? 0 : -1}>
-          Discard
+          {t("common.discard")}
         </button>
         <button type="button" className={btnPrimary} onClick={onSave} disabled={pending || !dirty} tabIndex={dirty ? 0 : -1}>
           {pending ? <Spinner /> : null}

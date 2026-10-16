@@ -1,18 +1,23 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/ui/panel";
-import { getOwnArtworks, getOwnHalls } from "@/lib/studio/queries";
 import { requireMuseum } from "@/lib/auth/session";
+import { getT } from "@/lib/i18n/server";
+import { getOwnArtworks, getOwnHalls } from "@/lib/studio/queries";
 import { AppearanceEditor } from "./AppearanceEditor";
 
-export const metadata: Metadata = { title: "Appearance" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t("ap.title") };
+}
 
 export default async function AppearancePage() {
   const { museum } = await requireMuseum();
+  const t = await getT();
   const [halls, artworks] = await Promise.all([getOwnHalls(), getOwnArtworks()]);
 
   return (
     <>
-      <PageHeader title="Appearance" description="Colors, fonts and the overall mood of your museum." />
+      <PageHeader title={t("ap.title")} description={t("ap.desc")} />
       <AppearanceEditor
         museum={museum}
         halls={halls}

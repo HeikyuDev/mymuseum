@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getOwnArtworks, getOwnHalls } from "@/lib/studio/queries";
 import { requireMuseum } from "@/lib/auth/session";
+import { getT } from "@/lib/i18n/server";
+import { getOwnArtworks, getOwnHalls } from "@/lib/studio/queries";
 import { uuidSchema } from "@/lib/validation/schemas";
 import { HallEditor } from "./HallEditor";
 
-export const metadata: Metadata = { title: "Edit hall" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t("cat.editTitle") };
+}
 
 export default async function EditHallPage({ params }: PageProps<"/studio/halls/[id]">) {
   const { id } = await params;

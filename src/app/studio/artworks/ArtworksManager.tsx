@@ -8,8 +8,9 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { deleteArtworks, moveArtworksToHall, reorderArtworks } from "@/app/studio/actions/artworks";
 import { PhotoExportButton } from "@/components/gallery/export/PhotoExportButton";
-import type { ViewerMuseum } from "@/lib/viewer-model";
 import { btnDanger, btnIconSm, btnSecondary, cardClass, EmptyState, Spinner } from "@/components/ui/panel";
+import { useI18n } from "@/lib/i18n/provider";
+import type { ViewerMuseum } from "@/lib/viewer-model";
 import { UploadPanel } from "./UploadPanel";
 
 type ArtworkItem = { id: string; title: string; hallId: string | null; imageUrl: string | null; isActive: boolean };
@@ -21,6 +22,7 @@ const ALL = "all";
 const NONE = "none";
 
 export function ArtworksManager({ museumId, halls, artworks: initial, viewerMuseum }: Props) {
+  const { t } = useI18n();
   const router = useRouter();
   const [artworks, setArtworks] = useState(initial);
   const [syncedFrom, setSyncedFrom] = useState(initial);
@@ -36,7 +38,7 @@ export function ArtworksManager({ museumId, halls, artworks: initial, viewerMuse
     setArtworks(initial);
   }
 
-  const hallName = (id: string | null) => halls.find((hall) => hall.id === id)?.name ?? "Unassigned";
+  const hallName = (id: string | null) => halls.find((hall) => hall.id === id)?.name ?? t("art.unassigned");
   const visible = artworks.filter((artwork) => (filter === ALL ? true : filter === NONE ? !artwork.hallId : artwork.hallId === filter));
   const reorderable = filter !== ALL;
   const selectedVisible = visible.filter((artwork) => selected.has(artwork.id));
@@ -56,7 +58,8 @@ export function ArtworksManager({ museumId, halls, artworks: initial, viewerMuse
   async function bulkDelete() {
     const ids = selectedVisible.map((artwork) => artwork.id);
     if (ids.length === 0) return;
-    if (!window.confirm(`Delete ${ids.length} ${ids.length === 1 ? "artwork" : "artworks"} and their image files? This cannot be undone.`)) return;
+    const question = ids.length === 1 ? t("art.confirmDeleteOne") : t("art.confirmDeleteOther", { count: ids.length });
+    if (!window.confirm(question)) return;
     setBusy(true);
     const result = await deleteArtworks(ids);
     setBusy(false);
@@ -66,7 +69,7 @@ export function ArtworksManager({ museumId, halls, artworks: initial, viewerMuse
     }
     setArtworks((current) => current.filter((artwork) => !ids.includes(artwork.id)));
     setSelected(new Set());
-    toast.success(`${result.data.deleted} deleted`);
+    toast.success(t("art.deletedCount", { count: result.data.deleted }));
     router.refresh();
   }
 
@@ -85,7 +88,7 @@ export function ArtworksManager({ museumId, halls, artworks: initial, viewerMuse
     setArtworks((current) => current.map((artwork) => (ids.includes(artwork.id) ? { ...artwork, hallId: target } : artwork)));
     setSelected(new Set());
     setMoveTarget("");
-    toast.success(`Moved to ${hallName(target)}`);
+    toast.success(t("art.movedTo", { name: hallName(target) }));
     router.refresh();
   }
 
@@ -115,8 +118,8 @@ export function ArtworksManager({ museumId, halls, artworks: initial, viewerMuse
   }
 
   const filters = [
-    { key: ALL, label: "All" },
-    { key: NONE, label: "Unassigned" },
+    { key: ALL, label: t("art.all") },
+    { key: NONE, label: t("art.unassigned") },
     ...halls.map((hall) => ({ key: hall.id, label: hall.name })),
   ];
 
@@ -130,7 +133,7 @@ export function ArtworksManager({ museumId, halls, artworks: initial, viewerMuse
         onFinished={() => router.refresh()}
       />
 
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter by hall">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t("art.filterAria")}>
         {filters.map((item) => (
           <button
             key={item.key}
@@ -148,14 +151,16 @@ export function ArtworksManager({ museumId, halls, artworks: initial, viewerMuse
       </div>
 
       {selectedVisible.length > 0 ? (
-        <div className={`${cardClass} sticky top-16 z-20 flex flex-wrap items-center gap-2 p-3`} role="region" aria-label="Bulk actions">
-          <span className="mr-auto text-sm font-medium">{selectedVisible.length} selected</span>
+        <div className={`${cardClass} sticky top-16 z-20 flex flex-wrap items-center gap-2 p-3`} role="region" aria-label={t("art.bulkAria")}>
+          <span className="mr-auto text-sm font-medium">
+            {selectedVisible.length === 1 ? t("art.selectedOne", { count: 1 }) : t("art.selectedOther", { count: selectedVisible.length })}
+          </span>
           <label htmlFor="bulk-hall" className="sr-only">
-            Move selected artworks to
+            {t("art.moveSelectedTo")}
           </label>
           <select id="bulk-hall" value={moveTarget} onChange={(event) => setMoveTarget(event.target.value)} className="min-h-10 rounded-theme border border-line bg-raised px-2 text-sm">
-            <option value="">Move to hall</option>
-            <option value={NONE}>Unassigned</option>
+            <option value="">{t("art.moveToCategory")}</option>
+            <option value={NONE}>{t("art.unassigned")}</option>
             {halls.map((hall) => (
               <option key={hall.id} value={hall.id}>
                 {hall.name}
@@ -163,26 +168,26 @@ export function ArtworksManager({ museumId, halls, artworks: initial, viewerMuse
             ))}
           </select>
           <button type="button" className={btnSecondary} onClick={bulkMove} disabled={busy || !moveTarget}>
-            Move
+            {t("art.move")}
           </button>
           <button type="button" className={btnDanger} onClick={bulkDelete} disabled={busy}>
             {busy ? <Spinner /> : <Trash2 aria-hidden className="size-4" />}
-            Delete
+            {t("common.delete")}
           </button>
           <button type="button" className={btnSecondary} onClick={() => setSelected(new Set())}>
-            Clear
+            {t("art.clear")}
           </button>
         </div>
       ) : visible.length > 0 ? (
         <button type="button" className="self-start text-sm font-medium text-accent-text underline-offset-4 hover:underline" onClick={() => setSelected(new Set(visible.map((artwork) => artwork.id)))}>
-          Select all {visible.length}
+          {t("art.selectAll", { count: visible.length })}
         </button>
       ) : null}
 
       {visible.length === 0 ? (
         <EmptyState
-          title={artworks.length === 0 ? "No artworks yet" : "Nothing here"}
-          description={artworks.length === 0 ? "Upload your first images above to start filling your museum." : "No artworks match this filter."}
+          title={artworks.length === 0 ? t("art.emptyTitle") : t("art.nothingTitle")}
+          description={artworks.length === 0 ? t("art.emptyBody") : t("art.nothingBody")}
         />
       ) : (
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -192,14 +197,14 @@ export function ArtworksManager({ museumId, halls, artworks: initial, viewerMuse
                 {artwork.imageUrl ? (
                   <img src={artwork.imageUrl} alt={artwork.title} loading="lazy" className="size-full object-cover" />
                 ) : (
-                  <div className="flex size-full items-center justify-center text-sm text-muted">No image</div>
+                  <div className="flex size-full items-center justify-center text-sm text-muted">{t("art.noImage")}</div>
                 )}
                 <label className="absolute top-2 left-2 flex size-8 cursor-pointer items-center justify-center rounded-theme bg-raised/90 shadow">
-                  <input type="checkbox" checked={selected.has(artwork.id)} onChange={() => toggle(artwork.id)} aria-label={`Select ${artwork.title}`} className="size-4 accent-[var(--v-accent)]" />
+                  <input type="checkbox" checked={selected.has(artwork.id)} onChange={() => toggle(artwork.id)} aria-label={t("art.selectAria", { title: artwork.title })} className="size-4 accent-[var(--v-accent)]" />
                 </label>
                 {!artwork.isActive ? (
                   <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-full bg-raised/90 px-2 py-0.5 text-xs font-medium shadow">
-                    <EyeOff aria-hidden className="size-3" /> Hidden
+                    <EyeOff aria-hidden className="size-3" /> {t("art.hidden")}
                   </span>
                 ) : null}
               </div>
@@ -211,23 +216,23 @@ export function ArtworksManager({ museumId, halls, artworks: initial, viewerMuse
                 <div className="mt-auto flex items-center gap-1.5">
                   <Link href={`/studio/artworks/${artwork.id}`} className={`${btnSecondary} !min-h-9 flex-1 !px-2`}>
                     <Pencil aria-hidden className="size-3.5" />
-                    Edit
+                    {t("common.edit")}
                   </Link>
                   {artwork.imageUrl ? (
                     <PhotoExportButton
                       mode="admin"
                       museum={viewerMuseum}
                       artworkId={artwork.id}
-                      ariaLabel={`Export ${artwork.title} as an image`}
+                      ariaLabel={t("art.exportAria", { title: artwork.title })}
                       className={`${btnIconSm} [&>svg]:size-4`}
                     />
                   ) : null}
                   {reorderable ? (
                     <>
-                      <button type="button" className={btnIconSm} disabled={index === 0} onClick={() => move(artwork.id, -1)} aria-label={`Move ${artwork.title} earlier`}>
+                      <button type="button" className={btnIconSm} disabled={index === 0} onClick={() => move(artwork.id, -1)} aria-label={t("art.earlier", { title: artwork.title })}>
                         <ArrowLeft aria-hidden className="size-4" />
                       </button>
-                      <button type="button" className={btnIconSm} disabled={index === visible.length - 1} onClick={() => move(artwork.id, 1)} aria-label={`Move ${artwork.title} later`}>
+                      <button type="button" className={btnIconSm} disabled={index === visible.length - 1} onClick={() => move(artwork.id, 1)} aria-label={t("art.later", { title: artwork.title })}>
                         <ArrowRight aria-hidden className="size-4" />
                       </button>
                     </>
@@ -238,9 +243,7 @@ export function ArtworksManager({ museumId, halls, artworks: initial, viewerMuse
           ))}
         </ul>
       )}
-      {reorderable && visible.length > 1 ? (
-        <p className="text-sm text-muted">Use the arrows to change the order in which visitors see these artworks.</p>
-      ) : null}
+      {reorderable && visible.length > 1 ? <p className="text-sm text-muted">{t("art.reorderHint")}</p> : null}
     </div>
   );
 }

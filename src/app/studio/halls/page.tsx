@@ -1,13 +1,18 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/ui/panel";
-import { getOwnArtworks, getOwnHalls } from "@/lib/studio/queries";
 import { requireMuseum } from "@/lib/auth/session";
+import { getT } from "@/lib/i18n/server";
+import { getOwnArtworks, getOwnHalls } from "@/lib/studio/queries";
 import { HallsManager } from "./HallsManager";
 
-export const metadata: Metadata = { title: "Halls" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t("cat.title") };
+}
 
 export default async function HallsPage() {
   await requireMuseum();
+  const t = await getT();
   const [halls, artworks] = await Promise.all([getOwnHalls(), getOwnArtworks()]);
   const counts: Record<string, number> = {};
   for (const artwork of artworks) {
@@ -16,7 +21,7 @@ export default async function HallsPage() {
 
   return (
     <>
-      <PageHeader title="Halls" description="Rooms of your museum. Visitors walk through them in this order." />
+      <PageHeader title={t("cat.title")} description={t("cat.desc")} />
       <HallsManager
         halls={halls.map((hall) => ({
           id: hall.id,

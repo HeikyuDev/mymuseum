@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getOwnArtworks, getOwnHalls } from "@/lib/studio/queries";
 import { requireMuseum } from "@/lib/auth/session";
+import { getT } from "@/lib/i18n/server";
+import { getOwnArtworks, getOwnHalls } from "@/lib/studio/queries";
 import { uuidSchema } from "@/lib/validation/schemas";
 import { artworkImageUrl, buildViewerMuseum } from "@/lib/viewer-model";
 import { ArtworkEditor } from "./ArtworkEditor";
 
-export const metadata: Metadata = { title: "Edit artwork" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t("art.editTitle") };
+}
 
 export default async function EditArtworkPage({ params }: PageProps<"/studio/artworks/[id]">) {
   const { id } = await params;

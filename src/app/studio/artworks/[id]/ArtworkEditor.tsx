@@ -13,6 +13,7 @@ import { PhotoExportButton } from "@/components/gallery/export/PhotoExportButton
 import { ArtworkFrame, computeFrame } from "@/components/viewer/ArtworkFrame";
 import { wallLayer } from "@/components/viewer/scenery";
 import { useUnsavedGuard } from "@/hooks/useUnsavedGuard";
+import { useI18n } from "@/lib/i18n/provider";
 import { FRAME_STYLES, resolveHallStyle } from "@/lib/hall-style";
 import { resolveFrameStyle, type ViewerArtwork, type ViewerMuseum } from "@/lib/viewer-model";
 import type { ArtworkRow, FrameStyle, HallRow } from "@/types/database";
@@ -50,6 +51,7 @@ function draftFrom(artwork: ArtworkRow): Draft {
 }
 
 export function ArtworkEditor({ artwork, imageUrl, halls, viewerMuseum }: { artwork: ArtworkRow; imageUrl: string | null; halls: HallRow[]; viewerMuseum: ViewerMuseum }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [saved, setSaved] = useState(() => draftFrom(artwork));
   const [draft, setDraft] = useState(saved);
@@ -82,8 +84,8 @@ export function ArtworkEditor({ artwork, imageUrl, halls, viewerMuseum }: { artw
   })();
 
   const options: Option<FrameChoice>[] = [
-    { ...frameOptions([hallStyle.defaultFrameStyle], draft.frame_color, draft.mat, draft.mat_color)[0], value: "inherit", label: "Hall default" },
-    ...frameOptions(FRAME_STYLES, draft.frame_color, draft.mat, draft.mat_color),
+    { ...frameOptions(t, [hallStyle.defaultFrameStyle], draft.frame_color, draft.mat, draft.mat_color)[0], value: "inherit", label: t("art.frameDefault") },
+    ...frameOptions(t, FRAME_STYLES, draft.frame_color, draft.mat, draft.mat_color),
   ];
 
   function save() {
@@ -108,13 +110,13 @@ export function ArtworkEditor({ artwork, imageUrl, halls, viewerMuseum }: { artw
       }
       setErrors({});
       setSaved(draft);
-      toast.success("Artwork saved");
+      toast.success(t("art.saved"));
       router.refresh();
     });
   }
 
   async function remove() {
-    if (!window.confirm(`Delete "${saved.title}" and its image file? This cannot be undone.`)) return;
+    if (!window.confirm(t("art.confirmDeleteThis", { title: saved.title }))) return;
     setDeleting(true);
     const result = await deleteArtworks([artwork.id]);
     if (!result.ok) {
@@ -122,7 +124,7 @@ export function ArtworkEditor({ artwork, imageUrl, halls, viewerMuseum }: { artw
       toast.error(result.error);
       return;
     }
-    toast.success("Artwork deleted");
+    toast.success(t("art.deleted"));
     router.push("/studio/artworks");
     router.refresh();
   }
@@ -132,13 +134,13 @@ export function ArtworkEditor({ artwork, imageUrl, halls, viewerMuseum }: { artw
       <div className="mb-5">
         <Link href="/studio/artworks" className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-fg">
           <ArrowLeft aria-hidden className="size-4" />
-          All artworks
+          {t("art.back")}
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{saved.title}</h1>
           {imageUrl ? (
             <PhotoExportButton mode="admin" museum={exportMuseum} artworkId={artwork.id} className={btnSecondary}>
-              Export as image
+              {t("art.exportButton")}
             </PhotoExportButton>
           ) : null}
         </div>
@@ -147,24 +149,24 @@ export function ArtworkEditor({ artwork, imageUrl, halls, viewerMuseum }: { artw
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
         <div className="order-2 flex min-w-0 flex-col gap-6 lg:order-1">
           <section className={`${cardClass} flex flex-col gap-4 p-5`} aria-labelledby="details">
-            <h2 id="details" className="font-display text-lg font-semibold">Details</h2>
-            <Field id="art-title" label="Title" error={errors.title}>
+            <h2 id="details" className="font-display text-lg font-semibold">{t("art.details")}</h2>
+            <Field id="art-title" label={t("art.fieldTitle")} error={errors.title}>
               <input id="art-title" value={draft.title} maxLength={160} onChange={(event) => patch("title", event.target.value)} aria-describedby="art-title-note" aria-invalid={errors.title ? true : undefined} className={inputClass} />
             </Field>
             <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem]">
-              <Field id="art-author" label="Author" error={errors.author_name}>
+              <Field id="art-author" label={t("art.fieldAuthor")} error={errors.author_name}>
                 <input id="art-author" value={draft.author_name} maxLength={120} onChange={(event) => patch("author_name", event.target.value)} aria-describedby="art-author-note" className={inputClass} />
               </Field>
-              <Field id="art-year" label="Year" error={errors.year}>
+              <Field id="art-year" label={t("art.fieldYear")} error={errors.year}>
                 <input id="art-year" inputMode="numeric" value={draft.year} onChange={(event) => patch("year", event.target.value.replace(/[^0-9]/g, "").slice(0, 4))} aria-describedby="art-year-note" className={inputClass} />
               </Field>
             </div>
-            <Field id="art-description" label="Description" error={errors.description} hint={`${draft.description.length}/2000`}>
+            <Field id="art-description" label={t("art.fieldDescription")} error={errors.description} hint={`${draft.description.length}/2000`}>
               <textarea id="art-description" value={draft.description} maxLength={2000} onChange={(event) => patch("description", event.target.value)} aria-describedby="art-description-note" className={textareaClass} />
             </Field>
-            <Field id="art-hall" label="Hall" error={errors.hall_id}>
+            <Field id="art-hall" label={t("art.fieldCategory")} error={errors.hall_id}>
               <select id="art-hall" value={draft.hall_id} onChange={(event) => patch("hall_id", event.target.value)} aria-describedby="art-hall-note" className={inputClass}>
-                <option value="">Unassigned (not shown to visitors)</option>
+                <option value="">{t("art.unassignedOption")}</option>
                 {halls.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -172,38 +174,38 @@ export function ArtworkEditor({ artwork, imageUrl, halls, viewerMuseum }: { artw
                 ))}
               </select>
             </Field>
-            <Field id="art-order" label="Position in hall" hint="Lower numbers appear first." error={errors.sort_order}>
+            <Field id="art-order" label={t("art.position")} hint={t("art.positionHint")} error={errors.sort_order}>
               <input id="art-order" type="number" min={0} value={draft.sort_order} onChange={(event) => patch("sort_order", Math.max(0, Math.trunc(Number(event.target.value) || 0)))} aria-describedby="art-order-note" className={`${inputClass} max-w-32`} />
             </Field>
-            <Toggle id="art-active" label="Show in the museum" description="Turn off to hide this artwork without deleting it." checked={draft.is_active} onChange={(value) => patch("is_active", value)} />
+            <Toggle id="art-active" label={t("art.show")} description={t("art.showDesc")} checked={draft.is_active} onChange={(value) => patch("is_active", value)} />
           </section>
 
           <section className={`${cardClass} flex flex-col gap-5 p-5`} aria-labelledby="frame">
-            <h2 id="frame" className="font-display text-lg font-semibold">Frame</h2>
+            <h2 id="frame" className="font-display text-lg font-semibold">{t("art.frame")}</h2>
             <OptionGroup
-              legend="Frame style"
+              legend={t("art.frameStyle")}
               name="art-frame"
               value={draft.frame}
               options={options}
               onChange={(value) => patch("frame", value)}
-              hint="Hall default follows the frame chosen for the hall."
+              hint={t("art.frameHint")}
             />
-            <ColorField id="frame-color" label="Frame color" value={draft.frame_color} fallback="#6b4423" clearLabel="Use style default" onChange={(value) => patch("frame_color", value)} />
-            <Toggle id="art-mat" label="Mat (passe-partout)" description="A card border between the frame and the picture." checked={draft.mat} onChange={(value) => patch("mat", value)} />
-            {draft.mat ? <ColorField id="mat-color" label="Mat color" value={draft.mat_color} fallback="#f4f0e6" clearLabel="Use default" onChange={(value) => patch("mat_color", value)} /> : null}
+            <ColorField id="frame-color" label={t("art.frameColor")} value={draft.frame_color} fallback="#6b4423" clearLabel={t("art.useStyleDefault")} onChange={(value) => patch("frame_color", value)} />
+            <Toggle id="art-mat" label={t("art.mat")} description={t("art.matDesc")} checked={draft.mat} onChange={(value) => patch("mat", value)} />
+            {draft.mat ? <ColorField id="mat-color" label={t("art.matColor")} value={draft.mat_color} fallback="#f4f0e6" clearLabel={t("art.useDefault")} onChange={(value) => patch("mat_color", value)} /> : null}
           </section>
 
           <div>
             <button type="button" onClick={remove} disabled={deleting} className={btnDanger}>
               {deleting ? <Spinner /> : <Trash2 aria-hidden className="size-4" />}
-              Delete artwork
+              {t("art.deleteButton")}
             </button>
           </div>
         </div>
 
-        <aside className="order-1 min-w-0 lg:order-2" aria-label="Preview">
+        <aside className="order-1 min-w-0 lg:order-2" aria-label={t("art.preview")}>
           <div className="lg:sticky lg:top-20">
-            <h2 className="mb-2 font-display text-lg font-semibold">Preview</h2>
+            <h2 className="mb-2 font-display text-lg font-semibold">{t("art.preview")}</h2>
             <div className="flex h-[300px] items-center justify-center overflow-hidden rounded-theme border border-line" style={wallLayer(hallStyle.wallStyle, hallStyle.wallColor)}>
               {imageUrl ? (
                 <ArtworkFrame
@@ -225,15 +227,15 @@ export function ArtworkEditor({ artwork, imageUrl, halls, viewerMuseum }: { artw
                   onLoadRatio={setLoadedRatio}
                 />
               ) : (
-                <p className="text-sm text-muted">No image</p>
+                <p className="text-sm text-muted">{t("art.noImage")}</p>
               )}
             </div>
-            <p className="mt-2 text-xs text-muted">Shown on {hall ? `the wall of ${hall.name}` : "a default wall"}.</p>
+            <p className="mt-2 text-xs text-muted">{hall ? t("art.shownOn", { name: hall.name }) : t("art.shownDefault")}</p>
           </div>
         </aside>
       </div>
 
-      <SaveBar dirty={dirty} pending={pending} onSave={save} onDiscard={() => setDraft(saved)} saveLabel="Save artwork" />
+      <SaveBar dirty={dirty} pending={pending} onSave={save} onDiscard={() => setDraft(saved)} saveLabel={t("art.save")} />
     </>
   );
 }

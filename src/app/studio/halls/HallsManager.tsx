@@ -7,10 +7,12 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { createHall, deleteHall, reorderHalls, setHallVisible } from "@/app/studio/actions/halls";
 import { btnDanger, btnIconSm, btnPrimary, btnSecondary, cardClass, EmptyState, Field, inputClass, Spinner } from "@/components/ui/panel";
+import { useI18n } from "@/lib/i18n/provider";
 
 type HallItem = { id: string; name: string; description: string | null; isVisible: boolean; artworkCount: number };
 
 export function HallsManager({ halls: initial }: { halls: HallItem[] }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [halls, setHalls] = useState(initial);
   const [syncedFrom, setSyncedFrom] = useState(initial);
@@ -24,6 +26,8 @@ export function HallsManager({ halls: initial }: { halls: HallItem[] }) {
     setHalls(initial);
   }
 
+  const countLabel = (count: number) => (count === 1 ? t("cat.artworksOne", { count }) : t("cat.artworksOther", { count }));
+
   function create(event: React.FormEvent) {
     event.preventDefault();
     const value = name.trim();
@@ -35,7 +39,7 @@ export function HallsManager({ halls: initial }: { halls: HallItem[] }) {
         return;
       }
       setName("");
-      toast.success("Hall created");
+      toast.success(t("cat.created"));
       router.push(`/studio/halls/${result.data.id}`);
     });
   }
@@ -68,10 +72,13 @@ export function HallsManager({ halls: initial }: { halls: HallItem[] }) {
   }
 
   async function remove(hall: HallItem) {
-    const detail = hall.artworkCount
-      ? ` Its ${hall.artworkCount} artwork${hall.artworkCount === 1 ? "" : "s"} will stay in your museum as unassigned.`
-      : "";
-    if (!window.confirm(`Delete the hall "${hall.name}"?${detail}`)) return;
+    const detail =
+      hall.artworkCount === 0
+        ? ""
+        : hall.artworkCount === 1
+          ? t("cat.confirmDeleteArtworksOne")
+          : t("cat.confirmDeleteArtworksOther", { count: hall.artworkCount });
+    if (!window.confirm(`${t("cat.confirmDelete", { name: hall.name })}${detail}`)) return;
     setBusyId(hall.id);
     const result = await deleteHall(hall.id);
     setBusyId(null);
@@ -79,7 +86,7 @@ export function HallsManager({ halls: initial }: { halls: HallItem[] }) {
       toast.error(result.error);
       return;
     }
-    toast.success("Hall deleted");
+    toast.success(t("cat.deleted"));
     router.refresh();
   }
 
@@ -87,25 +94,25 @@ export function HallsManager({ halls: initial }: { halls: HallItem[] }) {
     <div className="flex flex-col gap-6">
       <form onSubmit={create} className={`${cardClass} flex flex-col gap-3 p-4 sm:flex-row sm:items-end`}>
         <div className="flex-1">
-          <Field id="new-hall" label="New hall">
+          <Field id="new-hall" label={t("cat.new")}>
             <input
               id="new-hall"
               value={name}
               onChange={(event) => setName(event.target.value)}
               maxLength={80}
-              placeholder="e.g. Impressionists"
+              placeholder={t("cat.placeholder")}
               className={inputClass}
             />
           </Field>
         </div>
         <button type="submit" disabled={creating || !name.trim()} className={btnPrimary}>
           {creating ? <Spinner /> : <Plus aria-hidden className="size-4" />}
-          Add hall
+          {t("cat.add")}
         </button>
       </form>
 
       {halls.length === 0 ? (
-        <EmptyState title="No halls yet" description="Create your first hall above, then fill it with artworks." />
+        <EmptyState title={t("cat.emptyTitle")} description={t("cat.emptyBody")} />
       ) : (
         <ol className="flex flex-col gap-3">
           {halls.map((hall, index) => (
@@ -118,15 +125,15 @@ export function HallsManager({ halls: initial }: { halls: HallItem[] }) {
                   {hall.name}
                 </Link>
                 <p className="text-sm text-muted">
-                  {hall.artworkCount} {hall.artworkCount === 1 ? "artwork" : "artworks"}
-                  {hall.isVisible ? "" : " · Hidden from visitors"}
+                  {countLabel(hall.artworkCount)}
+                  {hall.isVisible ? "" : ` · ${t("cat.hiddenNote")}`}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
-                <button type="button" className={btnIconSm} onClick={() => move(index, -1)} disabled={index === 0} aria-label={`Move ${hall.name} up`}>
+                <button type="button" className={btnIconSm} onClick={() => move(index, -1)} disabled={index === 0} aria-label={t("cat.moveUp", { name: hall.name })}>
                   <ArrowUp aria-hidden className="size-4" />
                 </button>
-                <button type="button" className={btnIconSm} onClick={() => move(index, 1)} disabled={index === halls.length - 1} aria-label={`Move ${hall.name} down`}>
+                <button type="button" className={btnIconSm} onClick={() => move(index, 1)} disabled={index === halls.length - 1} aria-label={t("cat.moveDown", { name: hall.name })}>
                   <ArrowDown aria-hidden className="size-4" />
                 </button>
                 <button
@@ -134,16 +141,16 @@ export function HallsManager({ halls: initial }: { halls: HallItem[] }) {
                   className={btnIconSm}
                   onClick={() => toggleVisible(hall)}
                   aria-pressed={hall.isVisible}
-                  aria-label={hall.isVisible ? `Hide ${hall.name}` : `Show ${hall.name}`}
-                  title={hall.isVisible ? "Visible to visitors" : "Hidden from visitors"}
+                  aria-label={hall.isVisible ? t("cat.hide", { name: hall.name }) : t("cat.show", { name: hall.name })}
+                  title={hall.isVisible ? t("cat.visibleTitle") : t("cat.hiddenTitle")}
                 >
                   {hall.isVisible ? <Eye aria-hidden className="size-4" /> : <EyeOff aria-hidden className="size-4" />}
                 </button>
                 <Link href={`/studio/halls/${hall.id}`} className={`${btnSecondary} !min-h-9`}>
                   <Palette aria-hidden className="size-4" />
-                  Edit
+                  {t("common.edit")}
                 </Link>
-                <button type="button" className={`${btnDanger} !min-h-9 !px-2.5`} onClick={() => remove(hall)} disabled={busyId === hall.id} aria-label={`Delete ${hall.name}`}>
+                <button type="button" className={`${btnDanger} !min-h-9 !px-2.5`} onClick={() => remove(hall)} disabled={busyId === hall.id} aria-label={t("cat.deleteAria", { name: hall.name })}>
                   {busyId === hall.id ? <Spinner /> : <Trash2 aria-hidden className="size-4" />}
                 </button>
               </div>

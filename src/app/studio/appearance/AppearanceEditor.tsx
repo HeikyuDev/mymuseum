@@ -11,6 +11,8 @@ import { MuseumPreview } from "@/components/studio/previews";
 import { SaveBar } from "@/components/studio/SaveBar";
 import { btnSecondary, cardClass, Field, inputClass, Spinner } from "@/components/ui/panel";
 import { useUnsavedGuard } from "@/hooks/useUnsavedGuard";
+import { translateCode, type MessageKey } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n/provider";
 import { ACCEPTED_IMAGE_TYPES } from "@/lib/images";
 import { prepareImage } from "@/lib/images-client";
 import { removeFromArtworks, uploadToArtworks } from "@/lib/storage-upload";
@@ -30,11 +32,11 @@ type Draft = {
 
 type ChoiceKey = keyof typeof THEME_OVERRIDE_OPTIONS;
 
-const OVERRIDE_LABELS = {
-  radius: { legend: "Corners", sharp: "Sharp", soft: "Soft", round: "Round" },
-  density: { legend: "Spacing", compact: "Compact", comfortable: "Comfortable", spacious: "Spacious" },
-  motion: { legend: "Motion", calm: "Calm", normal: "Normal", lively: "Lively" },
-} as const;
+const OVERRIDE_KEYS = {
+  radius: { legend: "ap.corners", hint: "ap.cornersHint", sharp: "ap.sharp", soft: "ap.soft", round: "ap.round" },
+  density: { legend: "ap.spacing", hint: "ap.spacingHint", compact: "ap.compact", comfortable: "ap.comfortable", spacious: "ap.spacious" },
+  motion: { legend: "ap.motion", hint: "ap.motionHint", calm: "ap.calm", normal: "ap.normal", lively: "ap.lively" },
+} as const satisfies Record<ChoiceKey, Record<string, MessageKey>>;
 
 function draftFrom(museum: MuseumRow): Draft {
   return {
@@ -48,6 +50,7 @@ function draftFrom(museum: MuseumRow): Draft {
 }
 
 export function AppearanceEditor({ museum, halls, artworks }: { museum: MuseumRow; halls: HallRow[]; artworks: ArtworkRow[] }) {
+  const { t } = useI18n();
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [saved, setSaved] = useState(() => draftFrom(museum));
@@ -85,7 +88,7 @@ export function AppearanceEditor({ museum, halls, artworks }: { museum: MuseumRo
       setSessionCovers([...replaced, path]);
       patch("cover_image_path", path);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not upload the cover image.");
+      toast.error(error instanceof Error ? translateCode(t, error.message) : t("ap.coverFailed"));
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -100,7 +103,10 @@ export function AppearanceEditor({ museum, halls, artworks }: { museum: MuseumRo
 
   function save() {
     startTransition(async () => {
-      const result = await updateAppearance({ ...draft, default_hall_id: draft.default_hall_id || null });
+      // The default language is edited in Settings and stays as stored.
+      const { radius, density, motion, allowVisitorExport } = draft.theme_overrides;
+      const overrides = { radius, density, motion, allowVisitorExport };
+      const result = await updateAppearance({ ...draft, theme_overrides: overrides, default_hall_id: draft.default_hall_id || null });
       if (!result.ok) {
         setErrors(result.fieldErrors ?? {});
         toast.error(result.error);
@@ -109,7 +115,7 @@ export function AppearanceEditor({ museum, halls, artworks }: { museum: MuseumRo
       setErrors({});
       setSaved(draft);
       setSessionCovers([]);
-      toast.success("Appearance saved");
+      toast.success(t("ap.saved"));
       router.refresh();
     });
   }
@@ -119,14 +125,15 @@ export function AppearanceEditor({ museum, halls, artworks }: { museum: MuseumRo
 
   const overrideGroup = <K extends ChoiceKey>(key: K) => (
     <OptionGroup
-      legend={OVERRIDE_LABELS[key].legend}
+      legend={t(OVERRIDE_KEYS[key].legend)}
+      hint={t(OVERRIDE_KEYS[key].hint)}
       name={`override-${key}`}
       value={draft.theme_overrides[key] as string}
       onChange={(value) => patch("theme_overrides", { ...draft.theme_overrides, [key]: value })}
       columns="grid-cols-3"
       options={THEME_OVERRIDE_OPTIONS[key].map((value) => ({
         value: value as string,
-        label: (OVERRIDE_LABELS[key] as Record<string, string>)[value as string],
+        label: t((OVERRIDE_KEYS[key] as Record<string, MessageKey>)[value as string]),
         preview: (
           <span className="flex h-full items-center justify-center bg-surface">
             <OverrideSample kind={key} value={value as string} />
@@ -141,60 +148,61 @@ export function AppearanceEditor({ museum, halls, artworks }: { museum: MuseumRo
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,30rem)]">
         <div className="order-2 flex min-w-0 flex-col gap-6 xl:order-1">
           <section className={`${cardClass} flex flex-col gap-5 p-5`} aria-labelledby="look">
-            <h2 id="look" className="font-display text-lg font-semibold">Look and feel</h2>
-            <OptionGroup legend="Theme" name="theme-preset" value={draft.theme_preset} options={themePresetOptions(presets, draft.accent_color)} onChange={(value) => patch("theme_preset", value)} columns="grid-cols-2 sm:grid-cols-3" />
-            <ColorField id="accent" label="Accent color" value={draft.accent_color} fallback="#c9a227" onChange={(value) => patch("accent_color", value ?? "#c9a227")} />
+            <h2 id="look" className="font-display text-lg font-semibold">{t("ap.look")}</h2>
+            <OptionGroup legend={t("ap.theme")} hint={t("ap.themeHint")} name="theme-preset" value={draft.theme_preset} options={themePresetOptions(t, presets, draft.accent_color)} onChange={(value) => patch("theme_preset", value)} columns="grid-cols-2 sm:grid-cols-3" />
+            <p className="-mb-3 text-sm text-muted">{t("ap.accentHint")}</p>
+            <ColorField id="accent" label={t("ap.accent")} value={draft.accent_color} fallback="#c9a227" onChange={(value) => patch("accent_color", value ?? "#c9a227")} />
             {errors.accent_color ? <p role="alert" className="text-sm text-red-700">{errors.accent_color}</p> : null}
-            <OptionGroup legend="Fonts" name="font-pairing" value={draft.font_pairing} options={fontOptions(fonts)} onChange={(value) => patch("font_pairing", value)} columns="grid-cols-2 sm:grid-cols-4" />
+            <OptionGroup legend={t("ap.fonts")} hint={t("ap.fontsHint")} name="font-pairing" value={draft.font_pairing} options={fontOptions(t, fonts)} onChange={(value) => patch("font_pairing", value)} columns="grid-cols-2 sm:grid-cols-4" />
           </section>
 
           <section className={`${cardClass} flex flex-col gap-5 p-5`} aria-labelledby="fine-tune">
-            <h2 id="fine-tune" className="font-display text-lg font-semibold">Fine tuning</h2>
+            <h2 id="fine-tune" className="font-display text-lg font-semibold">{t("ap.fine")}</h2>
             {overrideGroup("radius")}
             {overrideGroup("density")}
             {overrideGroup("motion")}
           </section>
 
           <section className={`${cardClass} flex flex-col gap-4 p-5`} aria-labelledby="sharing">
-            <h2 id="sharing" className="font-display text-lg font-semibold">Sharing</h2>
+            <h2 id="sharing" className="font-display text-lg font-semibold">{t("ap.sharing")}</h2>
             <Toggle
               id="allow-visitor-export"
-              label="Let visitors download artwork images"
-              description="Adds a Download image button to each artwork so visitors can save a museum-styled picture. You can always export from the admin."
+              label={t("ap.visitorExport")}
+              description={t("ap.visitorExportDesc")}
               checked={draft.theme_overrides.allowVisitorExport}
               onChange={(value) => patch("theme_overrides", { ...draft.theme_overrides, allowVisitorExport: value })}
             />
           </section>
 
           <section className={`${cardClass} flex flex-col gap-4 p-5`} aria-labelledby="entrance">
-            <h2 id="entrance" className="font-display text-lg font-semibold">Entrance</h2>
+            <h2 id="entrance" className="font-display text-lg font-semibold">{t("ap.entrance")}</h2>
             <div>
-              <p className="mb-1.5 text-sm font-medium">Cover image</p>
+              <p className="mb-1.5 text-sm font-medium">{t("ap.cover")}</p>
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex h-24 w-40 items-center justify-center overflow-hidden rounded-theme border border-line bg-surface">
                   {draft.cover_image_path ? (
-                    <img src={getArtworkPublicUrl(draft.cover_image_path)} alt="Current cover" className="size-full object-cover" />
+                    <img src={getArtworkPublicUrl(draft.cover_image_path)} alt={t("ap.coverAlt")} className="size-full object-cover" />
                   ) : (
-                    <span className="px-2 text-center text-xs text-muted">Automatic (first artwork)</span>
+                    <span className="px-2 text-center text-xs text-muted">{t("ap.coverAuto")}</span>
                   )}
                 </div>
                 <input ref={fileRef} id="cover-input" type="file" accept={ACCEPTED_IMAGE_TYPES.join(",")} className="peer sr-only" disabled={uploading} onChange={(event) => void onCoverPicked(event.target.files?.[0])} />
                 <label htmlFor="cover-input" className={`${btnSecondary} cursor-pointer peer-focus-visible:outline-3 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}>
                   {uploading ? <Spinner /> : <ImagePlus aria-hidden className="size-4" />}
-                  {draft.cover_image_path ? "Replace" : "Upload"}
+                  {draft.cover_image_path ? t("ap.replace") : t("ap.upload")}
                 </label>
                 {draft.cover_image_path ? (
                   <button type="button" className={btnSecondary} onClick={() => patch("cover_image_path", null)}>
                     <Trash2 aria-hidden className="size-4" />
-                    Remove
+                    {t("ap.remove")}
                   </button>
                 ) : null}
               </div>
               {errors.cover_image_path ? <p role="alert" className="mt-1 text-sm text-red-700">{errors.cover_image_path}</p> : null}
             </div>
-            <Field id="default-hall" label="Default hall" hint={'Marked "Start here" on the museum entrance.'} error={errors.default_hall_id}>
+            <Field id="default-hall" label={t("ap.startCategory")} hint={t("ap.startCategoryHint")} error={errors.default_hall_id}>
               <select id="default-hall" value={draft.default_hall_id} onChange={(event) => patch("default_hall_id", event.target.value)} aria-describedby="default-hall-note" className={inputClass}>
-                <option value="">First hall</option>
+                <option value="">{t("ap.firstCategory")}</option>
                 {halls.map((hall) => (
                   <option key={hall.id} value={hall.id}>
                     {hall.name}
@@ -205,16 +213,16 @@ export function AppearanceEditor({ museum, halls, artworks }: { museum: MuseumRo
           </section>
         </div>
 
-        <aside className="order-1 min-w-0 xl:order-2" aria-label="Live preview">
+        <aside className="order-1 min-w-0 xl:order-2" aria-label={t("ap.preview")}>
           <div className="xl:sticky xl:top-20">
-            <h2 className="mb-2 font-display text-lg font-semibold">Live preview</h2>
+            <h2 className="mb-2 font-display text-lg font-semibold">{t("ap.preview")}</h2>
             <MuseumPreview museum={preview} />
-            <p className="mt-2 text-xs text-muted">Interactive preview of your museum with the unsaved changes above.</p>
+            <p className="mt-2 text-xs text-muted">{t("ap.previewNote")}</p>
           </div>
         </aside>
       </div>
 
-      <SaveBar dirty={dirty} pending={pending} onSave={save} onDiscard={() => void discard()} saveLabel="Save appearance" />
+      <SaveBar dirty={dirty} pending={pending} onSave={save} onDiscard={() => void discard()} saveLabel={t("ap.save")} />
     </>
   );
 }

@@ -25,10 +25,11 @@ export function sampleArtworkImage(index: number, aspect: number = SAMPLE_ASPECT
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-export function sampleViewerArtworks(frameStyle: FrameStyle): ViewerArtwork[] {
+/** Placeholder pictures for empty categories; `label` is the localized title prefix. */
+export function sampleViewerArtworks(frameStyle: FrameStyle, label: string): ViewerArtwork[] {
   return SAMPLE_ASPECTS.map((aspect, index) => ({
     id: `sample-${index}`,
-    title: `Sample artwork ${index + 1}`,
+    title: `${label} ${index + 1}`,
     description: null,
     author: null,
     year: null,

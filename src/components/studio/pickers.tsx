@@ -9,6 +9,7 @@ import {
   floorLayer,
   wallLayer,
 } from "@/components/viewer/scenery";
+import type { Translator } from "@/lib/i18n";
 import { FONT_PAIRING_STACKS, THEME_PRESETS } from "@/lib/theme";
 import type {
   FloorDecoration,
@@ -64,54 +65,26 @@ export function OptionGroup<T extends string>({ legend, name, value, options, on
 
 const cover = "block h-full w-full";
 
-const WALL_LABELS: Record<WallStyle, string> = {
-  plaster: "Plaster",
-  brick: "Brick",
-  concrete: "Concrete",
-  wood_panel: "Wood panel",
-  marble: "Marble",
-  velvet: "Velvet",
-  linen: "Linen",
-  custom_color: "Custom color",
-};
-
-export function wallOptions(customColor: string | null, values: readonly WallStyle[]): Option<WallStyle>[] {
+export function wallOptions(t: Translator, customColor: string | null, values: readonly WallStyle[]): Option<WallStyle>[] {
   return values.map((value) => ({
     value,
-    label: WALL_LABELS[value],
+    label: t(`wall.${value}` as const),
     preview: <span className={cover} style={wallLayer(value, customColor ?? "#d9d4c8")} />,
   }));
 }
 
-const FLOOR_LABELS: Record<FloorStyle, string> = {
-  parquet: "Parquet",
-  marble: "Marble",
-  concrete: "Concrete",
-  carpet: "Carpet",
-  dark_wood: "Dark wood",
-};
-
-export function floorOptions(values: readonly FloorStyle[]): Option<FloorStyle>[] {
+export function floorOptions(t: Translator, values: readonly FloorStyle[]): Option<FloorStyle>[] {
   return values.map((value) => ({
     value,
-    label: FLOOR_LABELS[value],
+    label: t(`floor.${value}` as const),
     preview: <span className={cover} style={floorLayer(value)} />,
   }));
 }
 
-const DECORATION_LABELS: Record<FloorDecoration, string> = {
-  none: "None",
-  red_carpet: "Red carpet",
-  runner_gold_trim: "Gold-trim runner",
-  rug_persian: "Persian rug",
-  rug_geometric: "Geometric rug",
-  spotlight_pool: "Spotlight",
-};
-
-export function decorationOptions(floor: FloorStyle, color: string | null, values: readonly FloorDecoration[]): Option<FloorDecoration>[] {
+export function decorationOptions(t: Translator, floor: FloorStyle, color: string | null, values: readonly FloorDecoration[]): Option<FloorDecoration>[] {
   return values.map((value) => ({
     value,
-    label: DECORATION_LABELS[value],
+    label: t(`deco.${value}` as const),
     preview: (
       <span className={`${cover} relative`} style={floorLayer(floor)}>
         {value !== "none" ? (
@@ -129,14 +102,19 @@ export function decorationOptions(floor: FloorStyle, color: string | null, value
   }));
 }
 
-const LIGHTING_LABELS: Record<LightingPreset, string> = { warm: "Warm", cold: "Cold", dramatic: "Dramatic", soft: "Soft" };
+const LIGHTING_KEYS = {
+  warm: "export.lightingWarm",
+  cold: "export.lightingCold",
+  dramatic: "export.lightingDramatic",
+  soft: "export.lightingSoft",
+} as const satisfies Record<LightingPreset, string>;
 
-export function lightingOptions(values: readonly LightingPreset[]): Option<LightingPreset>[] {
+export function lightingOptions(t: Translator, values: readonly LightingPreset[]): Option<LightingPreset>[] {
   return values.map((value) => {
     const light = LIGHTING[value];
     return {
       value,
-      label: LIGHTING_LABELS[value],
+      label: t(LIGHTING_KEYS[value]),
       preview: (
         <span
           className={cover}
@@ -150,30 +128,19 @@ export function lightingOptions(values: readonly LightingPreset[]): Option<Light
   });
 }
 
-const FRAME_LABELS: Record<FrameStyle, string> = {
-  minimal: "Minimal",
-  wood: "Wood",
-  gold: "Gold",
-  metallic: "Metallic",
-  canvas_wrap: "Canvas",
-  black_gallery: "Black gallery",
-  vintage_ornate: "Vintage",
-  floating_glass: "Glass",
-};
-
 /** Frame swatches render the real viewer frame around a sample picture. */
-export function frameOptions(values: readonly FrameStyle[], color: string | null, withMat: boolean, matColor: string | null): Option<FrameStyle>[] {
+export function frameOptions(t: Translator, values: readonly FrameStyle[], color: string | null, withMat: boolean, matColor: string | null): Option<FrameStyle>[] {
   return values.map((value) => {
     const metrics = computeFrame(1.3, 92, 70, value, withMat);
     return {
       value,
-      label: FRAME_LABELS[value],
+      label: t(`frame.${value}` as const),
       preview: (
         <span className="flex h-full w-full items-center justify-center" style={wallLayer("plaster", null)}>
           <ArtworkFrame
             artwork={{
               id: value,
-              title: FRAME_LABELS[value],
+              title: t(`frame.${value}` as const),
               description: null,
               author: null,
               year: null,
@@ -194,12 +161,12 @@ export function frameOptions(values: readonly FrameStyle[], color: string | null
   });
 }
 
-export function themePresetOptions(values: readonly ThemePreset[], accent: string): Option<ThemePreset>[] {
+export function themePresetOptions(t: Translator, values: readonly ThemePreset[], accent: string): Option<ThemePreset>[] {
   return values.map((value) => {
     const palette = THEME_PRESETS[value];
     return {
       value,
-      label: palette.label,
+      label: t(`theme.${value}` as const),
       preview: (
         <span className={`${cover} flex flex-col`} style={{ background: palette.canvas }}>
           <span className="flex h-[22%] items-center gap-1 px-1.5" style={{ background: palette.raised, borderBottom: `1px solid ${palette.line}` }}>
@@ -217,24 +184,17 @@ export function themePresetOptions(values: readonly ThemePreset[], accent: strin
   });
 }
 
-const FONT_LABELS: Record<FontPairing, string> = {
-  classic: "Classic",
-  modern: "Modern",
-  editorial: "Editorial",
-  handwritten: "Handwritten",
-};
-
-export function fontOptions(values: readonly FontPairing[]): Option<FontPairing>[] {
+export function fontOptions(t: Translator, values: readonly FontPairing[]): Option<FontPairing>[] {
   return values.map((value) => ({
     value,
-    label: FONT_LABELS[value],
+    label: t(`font.${value}` as const),
     preview: (
       <span className={`${cover} flex flex-col items-center justify-center bg-surface`}>
         <span className="text-3xl leading-none" style={{ fontFamily: FONT_PAIRING_STACKS[value].display }}>
           Aa
         </span>
         <span className="mt-1 text-[10px] text-muted" style={{ fontFamily: FONT_PAIRING_STACKS[value].body }}>
-          Body text
+          {t("font.sampleBody")}
         </span>
       </span>
     ),
