@@ -1,30 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 import type { CSSProperties } from "react";
 import type { ViewerArtwork } from "@/lib/museum-data";
+import { DEFAULT_MAT_COLOR, FRAME_DEFAULT_COLOR as DEFAULT_COLOR, FRAME_PAD_MULT as PAD_MULT } from "@/lib/scene-palette";
 import type { FrameStyle } from "@/types/database";
-
-// Frame thickness as a multiple of the base unit `t`.
-const PAD_MULT: Record<FrameStyle, number> = {
-  minimal: 0.6,
-  wood: 1.7,
-  gold: 1.6,
-  metallic: 1.2,
-  canvas_wrap: 0,
-  black_gallery: 0.9,
-  vintage_ornate: 2.6,
-  floating_glass: 0,
-};
-
-const DEFAULT_COLOR: Record<FrameStyle, string> = {
-  minimal: "#f6f3ec",
-  wood: "#6b4423",
-  gold: "#c9a227",
-  metallic: "#b8bcc2",
-  canvas_wrap: "#e6e0d2",
-  black_gallery: "#111111",
-  vintage_ornate: "#b08d3c",
-  floating_glass: "#ffffff",
-};
 
 export type FrameMetrics = {
   t: number;
@@ -119,7 +97,7 @@ type Props = {
 
 export function ArtworkFrame({ artwork, metrics, eager, onLoadRatio }: Props) {
   const color = artwork.frameColor ?? DEFAULT_COLOR[artwork.frameStyle];
-  const matColor = artwork.matColor ?? "#f4f0e6";
+  const matColor = artwork.matColor ?? DEFAULT_MAT_COLOR;
   const glass = artwork.frameStyle === "floating_glass";
   return (
     <div

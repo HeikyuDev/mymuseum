@@ -1,5 +1,8 @@
 import type { CSSProperties } from "react";
-import type { FloorDecoration, FloorStyle, LightingPreset, WallStyle } from "@/types/database";
+import { FLOOR_BASE, WALL_BASE } from "@/lib/scene-palette";
+import type { FloorDecoration, FloorStyle, WallStyle } from "@/types/database";
+
+export { FLOOR_DECORATION_SPECS, LIGHTING, type DecorationSpec, type Lighting } from "@/lib/scene-palette";
 
 // Procedural CSS/SVG textures. No image assets.
 
@@ -41,19 +44,19 @@ export function wallLayer(style: WallStyle, color: string | null): LayerStyle {
   switch (style) {
     case "brick":
       return {
-        backgroundColor: "#8f4333",
+        backgroundColor: WALL_BASE.brick,
         backgroundImage: `${noise("0.8", 0.35)}, ${brickTile}`,
         backgroundSize: "256px 256px, 96px 64px",
       };
     case "concrete":
       return {
-        backgroundColor: "#a3a5a7",
+        backgroundColor: WALL_BASE.concrete,
         backgroundImage: `${noise("0.55", 0.4)}, ${noise("0.015", 0.35, 2, 9)}`,
         backgroundSize: "256px 256px, 256px 256px",
       };
     case "wood_panel":
       return {
-        backgroundColor: "#8a5a36",
+        backgroundColor: WALL_BASE.wood_panel,
         backgroundImage: `repeating-linear-gradient(90deg, rgba(0,0,0,.38) 0 2px, rgba(255,255,255,.05) 2px 4px, transparent 4px 120px), ${svgUrl(
           `<filter id='w' x='0' y='0' width='100%' height='100%'><feTurbulence type='fractalNoise' baseFrequency='0.012 0.45' numOctaves='3' seed='5' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.15  0 0 0 0 0.07  0 0 0 0 0.02  0 1.2 0 0 -0.15'/></filter><rect width='100%' height='100%' filter='url(#w)'/>`,
           256,
@@ -63,25 +66,25 @@ export function wallLayer(style: WallStyle, color: string | null): LayerStyle {
       };
     case "marble":
       return {
-        backgroundColor: "#eeebe6",
+        backgroundColor: WALL_BASE.marble,
         backgroundImage: `${veins("0.006 0.012", 0.55, 4)}, ${veins("0.015 0.008", 0.3, 11)}`,
         backgroundSize: "512px 512px, 512px 512px",
       };
     case "velvet":
       return {
-        backgroundColor: "#5b1a2c",
+        backgroundColor: WALL_BASE.velvet,
         backgroundImage: `repeating-linear-gradient(90deg, rgba(0,0,0,.3) 0 6px, rgba(255,255,255,.06) 6px 12px, transparent 12px 30px), ${noise("1.4", 0.3)}`,
         backgroundSize: "auto, 256px 256px",
       };
     case "linen":
       return {
-        backgroundColor: "#d8ccb5",
+        backgroundColor: WALL_BASE.linen,
         backgroundImage: `repeating-linear-gradient(0deg, rgba(0,0,0,.06) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, rgba(0,0,0,.06) 0 1px, transparent 1px 3px), ${noise("1.2", 0.2)}`,
         backgroundSize: "auto, auto, 256px 256px",
       };
     case "custom_color":
       return {
-        backgroundColor: color ?? "#efebe4",
+        backgroundColor: color ?? WALL_BASE.custom_color,
         backgroundImage: noise("0.9", 0.12),
         backgroundSize: "256px 256px",
       };
@@ -89,7 +92,7 @@ export function wallLayer(style: WallStyle, color: string | null): LayerStyle {
     default:
       // Bright off-white gallery wall.
       return {
-        backgroundColor: "#f1ede6",
+        backgroundColor: WALL_BASE.plaster,
         backgroundImage: noise("0.9", 0.1),
         backgroundSize: "256px 256px",
       };
@@ -100,25 +103,25 @@ export function floorLayer(style: FloorStyle): LayerStyle {
   switch (style) {
     case "marble":
       return {
-        backgroundColor: "#e4e0d9",
+        backgroundColor: FLOOR_BASE.marble,
         backgroundImage: `${veins("0.008 0.02", 0.4, 6)}, repeating-conic-gradient(rgba(255,255,255,.35) 0% 25%, rgba(0,0,0,.05) 0% 50%)`,
         backgroundSize: "512px 512px, 220px 220px",
       };
     case "concrete":
       return {
-        backgroundColor: "#a9abad",
+        backgroundColor: FLOOR_BASE.concrete,
         backgroundImage: `repeating-linear-gradient(90deg, rgba(0,0,0,.14) 0 2px, transparent 2px 260px), repeating-linear-gradient(0deg, rgba(0,0,0,.12) 0 2px, transparent 2px 200px), ${noise("0.5", 0.3)}`,
         backgroundSize: "auto, auto, 256px 256px",
       };
     case "carpet":
       return {
-        backgroundColor: "#6b3a43",
+        backgroundColor: FLOOR_BASE.carpet,
         backgroundImage: noise("1.6", 0.4),
         backgroundSize: "256px 256px",
       };
     case "dark_wood":
       return {
-        backgroundColor: "#4a301e",
+        backgroundColor: FLOOR_BASE.dark_wood,
         backgroundImage: `repeating-linear-gradient(90deg, rgba(0,0,0,.4) 0 2px, transparent 2px 84px), ${noise("0.02 0.4", 0.5, 3, 8)}`,
         backgroundSize: "auto, 256px 256px",
       };
@@ -126,42 +129,14 @@ export function floorLayer(style: FloorStyle): LayerStyle {
     default:
       // Light oak planks.
       return {
-        backgroundColor: "#d2b48c",
+        backgroundColor: FLOOR_BASE.parquet,
         backgroundImage: `repeating-linear-gradient(90deg, rgba(90,60,30,.35) 0 2px, transparent 2px 96px), repeating-linear-gradient(0deg, rgba(90,60,30,.12) 0 1px, transparent 1px 48px), ${noise("0.015 0.35", 0.35, 3, 12)}`,
         backgroundSize: "auto, auto, 256px 256px",
       };
   }
 }
 
-export type Lighting = {
-  tint: string; // "r, g, b"
-  cone: number; // strength of the spotlight cone
-  vignette: number; // edge darkening 0-1
-  ambient: string; // overlay color over the whole room
-};
-
-export const LIGHTING: Record<LightingPreset, Lighting> = {
-  warm: { tint: "255, 214, 150", cone: 0.34, vignette: 0.42, ambient: "rgba(255, 190, 110, 0.08)" },
-  cold: { tint: "176, 208, 255", cone: 0.28, vignette: 0.42, ambient: "rgba(120, 160, 255, 0.08)" },
-  dramatic: { tint: "255, 240, 215", cone: 0.5, vignette: 0.75, ambient: "rgba(0, 0, 0, 0.2)" },
-  soft: { tint: "255, 255, 255", cone: 0.2, vignette: 0.16, ambient: "rgba(255, 255, 255, 0.04)" },
-};
-
 // --- floor decorations (drawn on the perspective floor plane) ---------------
-
-export type DecorationSpec = {
-  /** "runner" spans the whole strip, "rug" repeats per slot, "pool" is a light spot per slot. */
-  kind: "runner" | "rug" | "pool";
-  color: string;
-};
-
-export const FLOOR_DECORATION_SPECS: Record<Exclude<FloorDecoration, "none">, DecorationSpec> = {
-  red_carpet: { kind: "runner", color: "#9b1c28" },
-  runner_gold_trim: { kind: "runner", color: "#1f4a3a" },
-  rug_persian: { kind: "rug", color: "#7a2430" },
-  rug_geometric: { kind: "rug", color: "#2f3a4a" },
-  spotlight_pool: { kind: "pool", color: "#fff6dc" },
-};
 
 const persianTile = (color: string) =>
   svgUrl(
