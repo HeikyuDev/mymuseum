@@ -1,5 +1,7 @@
 # 02 - Especificación de Base de Datos y Persistencia
 
+> **Status: superseded.** This spec is superseded. It describes a Prisma schema with application-managed credentials. The real schema is in supabase/migrations/ (Supabase Auth owns credentials; `profiles` has no password column). See the root README.md.
+
 ## 1. Visión General del Modelo de Datos
 El almacenamiento de **Mi Museo** está estructurado sobre un esquema relacional normalizado con soporte estricto para aislamiento multi-inquilino (*multi-tenancy*). Cada museo pertenece a un usuario propietario, y todas las configuraciones de escena 3D y obras de arte se encuentran segregadas por el identificador del museo (`museum_id`).
 

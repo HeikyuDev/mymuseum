@@ -1,5 +1,7 @@
 # 01 - Especificación de Arquitectura de Sistema
 
+> **Status: superseded.** This spec is superseded. It describes an earlier design (NextAuth, Prisma, a WebGL/3D engine). The current architecture is Next.js App Router + Supabase (Auth, Postgres with RLS, Storage) and a 2.5D button-only viewer. See the root README.md and docs/SUPABASE_SETUP.md.
+
 ## 1. Visión General y Objetivos
 **Mi Museo** es una plataforma web *multi-tenant* diseñada para que artistas, curadores, galerías y entusiastas puedan registrarse, diseñar su propia galería 3D interactiva en tiempo real, subir obras de arte y compartir una URL pública (`/m/[slug]`) accesible desde cualquier navegador moderno (Desktop, Tablet y Mobile) sin requerir instalación de plugins.
 

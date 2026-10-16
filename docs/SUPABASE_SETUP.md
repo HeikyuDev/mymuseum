@@ -4,9 +4,14 @@
 1. Go to https://supabase.com/dashboard and create a new project.
 2. Save the database password somewhere safe (the app does not use it).
 
-## 2. Run the migration
-Option A, SQL editor: open **SQL Editor**, paste the contents of
-`supabase/migrations/20261016000000_initial_schema.sql` and click **Run**.
+## 2. Run the migrations
+Run the files in `supabase/migrations/` in this order:
+
+1. `20261016000000_initial_schema.sql` - tables, RLS, helper functions, auth trigger, `artworks` bucket.
+2. `20261016120000_museum_theme.sql` - museum theme preset/overrides, hall floor decorations and decor bag.
+3. `20261017000000_artwork_frame_nullable.sql` - artworks may inherit the hall's default frame style.
+
+Option A, SQL editor: open **SQL Editor**, paste each file in order and click **Run**.
 
 Option B, CLI:
 ```bash
@@ -61,4 +66,4 @@ super admin exists.
 
 ## Notes
 - Deleting a hall keeps its artworks (`hall_id` becomes null).
-- Prisma is still present for the legacy code and will be removed in Phase 2.
+- Client accounts are created from the super admin area (`/super/clients/new`); the service role key must be set for that.

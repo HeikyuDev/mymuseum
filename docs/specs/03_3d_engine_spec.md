@@ -1,5 +1,7 @@
 # 03 - Especificación del Motor 3D (Three.js & React Three Fiber)
 
+> **Status: superseded.** This spec is superseded. The 3D engine was replaced by a 2.5D, button-only viewer (src/components/viewer, src/lib/viewer-model.ts). Kept for historical reference only.
+
 ## 1. Visión General del Motor 3D
 El motor gráfico de **Mi Museo** está construido sobre **React Three Fiber (R3F)** y **Three.js**, diseñado para garantizar una experiencia interactiva en primera persona a 60 FPS tanto en navegadores de escritorio de alta gama como en dispositivos móviles de gama media/baja.
 

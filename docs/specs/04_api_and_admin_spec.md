@@ -1,5 +1,7 @@
 # 04 - Especificación de API, Server Actions y Panel de Administración
 
+> **Status: superseded.** This spec is superseded. Authentication is Supabase Auth with server actions, not NextAuth or REST routes. The implemented admin areas are /admin (museum admin) and /super (super admin). See the root README.md.
+
 ## 1. Visión General de la Capa de Aplicación y Administración
 La administración de **Mi Museo** combina la potencia de **Next.js Server Actions** (con validación de tipos estricta mediante **Zod**) y componentes reactivos en el cliente para proporcionar:
 1. Una gestión fluida de obras de arte (CRUD, subida de imágenes, detección de dimensiones y aspecto).
