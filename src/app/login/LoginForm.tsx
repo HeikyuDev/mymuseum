@@ -2,7 +2,7 @@
 
 import { AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useActionState, useState } from "react";
-import { btnPrimary, Field, inputClass, Spinner } from "@/components/admin/ui";
+import { btnPrimary, Field, inputClass, Spinner } from "@/components/ui/panel";
 import { signIn, type LoginState } from "./actions";
 
 const initialState: LoginState = {};

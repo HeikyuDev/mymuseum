@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { floorLayer, wallLayer } from "@/components/viewer/scenery";
 import { homeForRole, safeNextPath } from "@/lib/auth/redirects";
 import { getAuthState } from "@/lib/auth/session";
-import { ADMIN_THEME } from "@/lib/admin/theme";
+import { PANEL_THEME } from "@/lib/panel-theme";
 import { LoginForm } from "./LoginForm";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -24,7 +24,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   }
 
   return (
-    <div className="grid min-h-dvh bg-canvas text-fg lg:grid-cols-2" style={ADMIN_THEME.cssVars}>
+    <div className="grid min-h-dvh bg-canvas text-fg lg:grid-cols-2" style={PANEL_THEME.cssVars}>
       <aside aria-hidden className="relative hidden overflow-hidden lg:block" style={wallLayer("plaster", null)}>
         <div className="absolute inset-x-0 bottom-0 h-[28%]" style={floorLayer("parquet")} />
         <div className="absolute inset-x-0 bottom-[28%] h-3 bg-white/70 shadow-sm" />

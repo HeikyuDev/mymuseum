@@ -3,7 +3,7 @@
 import { ImageDown } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useState, type ReactNode } from "react";
-import { ADMIN_THEME } from "@/lib/admin/theme";
+import { PANEL_THEME } from "@/lib/panel-theme";
 import { useI18n } from "@/lib/i18n/provider";
 import type { PhotoDialogProps } from "./PhotoExportDialog";
 
@@ -27,7 +27,7 @@ export function PhotoExportButton({ className, children, ariaLabel, mode = "visi
         <ImageDown aria-hidden className="size-5" />
         {children}
       </button>
-      {open ? <PhotoExportDialog mode={mode} museum={museum} themeVars={mode === "admin" ? ADMIN_THEME.cssVars : museum.theme.cssVars} {...dialog} onClose={() => setOpen(false)} /> : null}
+      {open ? <PhotoExportDialog mode={mode} museum={museum} themeVars={mode === "admin" ? PANEL_THEME.cssVars : museum.theme.cssVars} {...dialog} onClose={() => setOpen(false)} /> : null}
     </>
   );
 }

@@ -1,16 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-
-const PROTECTED_PREFIXES = ["/admin", "/super"];
-
-function isProtected(pathname: string): boolean {
-  return PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
-}
+import { isProtectedPath, loginPathFor } from "@/lib/auth/redirects";
 
 // 1. Refreshes the Supabase session cookie on every request.
-// 2. Sends anonymous visitors of /admin/** and /super/** to /login.
-// This is only a first line of defence: the admin layout and every data access
-// function verify the user and the role again on the server.
+// 2. Sends anonymous visitors of /admin/** and /studio/** to /login?next=...
+// This is only a first line of defence: the layouts, every data access function
+// and every server action verify the user and the role again on the server.
+// (The proxy cannot know the role without a database round trip, so wrong-role
+// redirects, for example a client opening /admin, are decided server-side.)
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -39,12 +36,8 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname, search } = request.nextUrl;
-  if (!user && isProtected(pathname)) {
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
-    loginUrl.search = "";
-    loginUrl.searchParams.set("next", `${pathname}${search}`);
-    const redirect = NextResponse.redirect(loginUrl);
+  if (!user && isProtectedPath(pathname)) {
+    const redirect = NextResponse.redirect(new URL(loginPathFor(pathname, search), request.url));
     // Keep any cookies the refresh just cleared or rotated.
     response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
     return redirect;

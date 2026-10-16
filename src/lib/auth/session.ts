@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { homeForRole, STUDIO_AREA } from "@/lib/auth/redirects";
 import { createClient } from "@/lib/supabase/server";
 import type { MuseumRow, ProfileRow, UserRole } from "@/types/database";
 
@@ -39,14 +40,20 @@ export async function requireUser(): Promise<{ userId: string; profile: ProfileR
   return auth;
 }
 
+/** Requires one specific role; any other signed-in user is sent to their own home. */
 export async function requireRole(role: UserRole) {
   const auth = await requireUser();
-  if (auth.profile.role !== role) redirect(auth.profile.role === "super_admin" ? "/super" : "/admin");
+  if (auth.profile.role !== role) redirect(homeForRole(auth.profile.role));
   return auth;
 }
 
-/** The museum owned by the current user (explicit ownership filter on top of RLS). */
-export const getOwnedMuseum = cache(async (): Promise<MuseumRow | null> => {
+/**
+ * The user's only museum (explicit ownership filter on top of RLS). Every user
+ * has at most one; the unique index on museums.owner_id enforces it. The
+ * ordering and limit only keep databases that have not applied that migration
+ * yet from failing on a duplicate row.
+ */
+export const getOwnMuseum = cache(async (): Promise<MuseumRow | null> => {
   const { userId } = await requireUser();
   const supabase = await createClient();
   const { data } = await supabase
@@ -59,10 +66,10 @@ export const getOwnedMuseum = cache(async (): Promise<MuseumRow | null> => {
   return data;
 });
 
-/** Auth + the user's museum. Sends users without a museum to the onboarding at /admin. */
+/** Auth + the user's museum. Sends users without a museum to the onboarding at /studio. */
 export async function requireMuseum() {
   const auth = await requireUser();
-  const museum = await getOwnedMuseum();
-  if (!museum) redirect("/admin");
+  const museum = await getOwnMuseum();
+  if (!museum) redirect(STUDIO_AREA);
   return { ...auth, museum };
 }

@@ -1,11 +1,12 @@
-import { Skeleton } from "@/components/admin/ui";
+import { Skeleton } from "@/components/ui/panel";
 
 export default function AdminLoading() {
   return (
     <div role="status" aria-label="Loading" className="flex flex-col gap-4">
       <Skeleton className="h-9 w-56" />
       <Skeleton className="h-4 w-80 max-w-full" />
-      <div className="mt-4 grid grid-cols-3 gap-3">
+      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Skeleton className="h-24" />
         <Skeleton className="h-24" />
         <Skeleton className="h-24" />
         <Skeleton className="h-24" />
