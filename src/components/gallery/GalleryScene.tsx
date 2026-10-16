@@ -165,7 +165,7 @@ export function GalleryScene({
         return (
           <group key={zone.id}>
             <Zone zoneIndex={i} floorRange={[floorStart, end]} wallRanges={wallRanges} layout={layout} isFirst={i === 0} isLast={i === last} look={looks[i]} />
-            <Portal x={span.portalX} title={zoneTitle(zone, otherLabel)} look={looks[i]} />
+            <Portal x={span.portalX} title={zoneTitle(zone, otherLabel)} look={looks[i]} fromLook={looks[i - 1] ?? looks[i]} />
             {quality.props ? <CeilingTrack range={[floorStart, end]} xs={layout.artworks.filter((a) => a.zoneIndex === i).map((a) => a.x)} lit={looks[i].lighting.spots} /> : null}
           </group>
         );
