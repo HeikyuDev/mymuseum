@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="img/mymuseum_logo.png" alt="MyMuseum - Your gallery, your story" width="560" />
+</p>
+
 # MyMuseum
 
 MyMuseum is a multi-tenant platform for virtual museums. Each client gets their own museum with halls (categories), framed artworks and a fully customizable look, published at a public link.
