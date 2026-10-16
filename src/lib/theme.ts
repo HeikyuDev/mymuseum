@@ -163,9 +163,16 @@ export type ThemeOverrides = {
   radius: keyof typeof RADIUS;
   density: keyof typeof DENSITY;
   motion: keyof typeof MOTION;
+  /** Whether public visitors may download the museum-styled image of an artwork. */
+  allowVisitorExport: boolean;
 };
 
-export const DEFAULT_OVERRIDES: ThemeOverrides = { radius: "soft", density: "comfortable", motion: "normal" };
+export const DEFAULT_OVERRIDES: ThemeOverrides = {
+  radius: "soft",
+  density: "comfortable",
+  motion: "normal",
+  allowVisitorExport: true,
+};
 
 function pick<K extends string>(table: Record<K, unknown>, raw: unknown, fallback: K): K {
   return typeof raw === "string" && raw in table ? (raw as K) : fallback;
@@ -183,6 +190,8 @@ export function resolveOverrides(raw: unknown): ThemeOverrides {
     radius: pick(RADIUS, bag.radius, DEFAULT_OVERRIDES.radius),
     density: pick(DENSITY, bag.density, DEFAULT_OVERRIDES.density),
     motion: pick(MOTION, bag.motion, DEFAULT_OVERRIDES.motion),
+    allowVisitorExport:
+      typeof bag.allowVisitorExport === "boolean" ? bag.allowVisitorExport : DEFAULT_OVERRIDES.allowVisitorExport,
   };
 }
 

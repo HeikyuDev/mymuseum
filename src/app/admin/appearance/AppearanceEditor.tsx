@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { updateAppearance } from "@/app/admin/actions/museum";
-import { ColorField, OptionGroup, fontOptions, themePresetOptions } from "@/components/admin/pickers";
+import { ColorField, OptionGroup, Toggle, fontOptions, themePresetOptions } from "@/components/admin/pickers";
 import { MuseumPreview } from "@/components/admin/previews";
 import { SaveBar } from "@/components/admin/SaveBar";
 import { btnSecondary, cardClass, Field, inputClass, Spinner } from "@/components/admin/ui";
@@ -27,6 +27,8 @@ type Draft = {
   default_hall_id: string;
   cover_image_path: string | null;
 };
+
+type ChoiceKey = keyof typeof THEME_OVERRIDE_OPTIONS;
 
 const OVERRIDE_LABELS = {
   radius: { legend: "Corners", sharp: "Sharp", soft: "Soft", round: "Round" },
@@ -115,7 +117,7 @@ export function AppearanceEditor({ museum, halls, artworks }: { museum: MuseumRo
   const presets = Object.keys(THEME_PRESETS) as ThemePreset[];
   const fonts = Object.keys(FONT_PAIRING_STACKS) as FontPairing[];
 
-  const overrideGroup = <K extends keyof ThemeOverrides>(key: K) => (
+  const overrideGroup = <K extends ChoiceKey>(key: K) => (
     <OptionGroup
       legend={OVERRIDE_LABELS[key].legend}
       name={`override-${key}`}
@@ -151,6 +153,17 @@ export function AppearanceEditor({ museum, halls, artworks }: { museum: MuseumRo
             {overrideGroup("radius")}
             {overrideGroup("density")}
             {overrideGroup("motion")}
+          </section>
+
+          <section className={`${cardClass} flex flex-col gap-4 p-5`} aria-labelledby="sharing">
+            <h2 id="sharing" className="font-display text-lg font-semibold">Sharing</h2>
+            <Toggle
+              id="allow-visitor-export"
+              label="Let visitors download artwork images"
+              description="Adds a Download image button to each artwork so visitors can save a museum-styled picture. You can always export from the admin."
+              checked={draft.theme_overrides.allowVisitorExport}
+              onChange={(value) => patch("theme_overrides", { ...draft.theme_overrides, allowVisitorExport: value })}
+            />
           </section>
 
           <section className={`${cardClass} flex flex-col gap-4 p-5`} aria-labelledby="entrance">
@@ -207,7 +220,7 @@ export function AppearanceEditor({ museum, halls, artworks }: { museum: MuseumRo
 }
 
 /** Tiny visual for the override pickers. */
-function OverrideSample({ kind, value }: { kind: keyof ThemeOverrides; value: string }) {
+function OverrideSample({ kind, value }: { kind: ChoiceKey; value: string }) {
   if (kind === "radius") {
     const radius = value === "sharp" ? 2 : value === "soft" ? 8 : 18;
     return <span className="block h-8 w-12 border-2 border-fg/60 bg-raised" style={{ borderRadius: radius }} />;
