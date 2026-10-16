@@ -4,31 +4,25 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { createClientAccount, type CreatedClient } from "@/app/admin/actions";
-import { btnPrimary, btnSecondary, cardClass, Field, inputClass, Spinner } from "@/components/ui/panel";
 import { CredentialsPanel } from "@/components/admin/CredentialsPanel";
 import { PasswordField } from "@/components/admin/PasswordField";
-import { slugify } from "@/lib/validation/slug";
+import { btnPrimary, btnSecondary, cardClass, Field, inputClass, Spinner } from "@/components/ui/panel";
+import { useI18n } from "@/lib/i18n/provider";
 
-type Values = { email: string; displayName: string; password: string; museumTitle: string; museumSlug: string };
+type Values = { email: string; displayName: string; password: string };
 
-const empty = (): Values => ({ email: "", displayName: "", password: "", museumTitle: "", museumSlug: "" });
+const empty = (): Values => ({ email: "", displayName: "", password: "" });
 
 export function NewClientForm() {
+  const { t } = useI18n();
   const [values, setValues] = useState<Values>(empty);
-  const [slugTouched, setSlugTouched] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [created, setCreated] = useState<{ client: CreatedClient; password: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const set = (key: keyof Values) => (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
-    setValues((current) => {
-      const next = { ...current, [key]: value };
-      // Keep the address in sync with the title until the admin edits it.
-      if (key === "museumTitle" && !slugTouched) next.museumSlug = slugify(value);
-      return next;
-    });
-    if (key === "museumSlug") setSlugTouched(true);
+    setValues((current) => ({ ...current, [key]: value }));
   };
 
   function submit(event: React.FormEvent) {
@@ -42,11 +36,9 @@ export function NewClientForm() {
       }
       setErrors({});
       setCreated({ client: result.data, password: values.password });
-      if (result.data.warning) toast.warning(result.data.warning);
-      else toast.success("Client created");
+      toast.success(t("adm.clientCreated"));
       // The form (and its password) is cleared immediately.
       setValues(empty());
-      setSlugTouched(false);
     });
   }
 
@@ -54,18 +46,17 @@ export function NewClientForm() {
     return (
       <div className="flex max-w-2xl flex-col gap-4">
         <CredentialsPanel
-          title="Client created"
+          title={t("adm.clientCreated")}
           email={created.client.email}
           password={created.password}
-          museumPath={created.client.museumSlug ? `/m/${created.client.museumSlug}` : null}
           onDismiss={() => setCreated(null)}
         />
         <div className="flex flex-wrap gap-2">
           <Link href={`/admin/clients/${created.client.userId}`} className={btnSecondary}>
-            Open client
+            {t("adm.openClient")}
           </Link>
           <Link href="/admin/clients" className={btnSecondary}>
-            Back to clients
+            {t("adm.backToClients")}
           </Link>
         </div>
       </div>
@@ -74,31 +65,21 @@ export function NewClientForm() {
 
   return (
     <form onSubmit={submit} className={`${cardClass} flex max-w-2xl flex-col gap-5 p-5 sm:p-6`} noValidate autoComplete="off">
-      <Field id="email" label="Email" error={errors.email}>
+      <Field id="email" label={t("adm.fieldEmail")} error={errors.email}>
         <input id="email" type="email" value={values.email} onChange={set("email")} required autoComplete="off" aria-describedby="email-note" aria-invalid={errors.email ? true : undefined} className={inputClass} />
       </Field>
-      <Field id="displayName" label="Display name" error={errors.displayName}>
+      <Field id="displayName" label={t("adm.fieldName")} error={errors.displayName}>
         <input id="displayName" value={values.displayName} onChange={set("displayName")} maxLength={80} required aria-describedby="displayName-note" aria-invalid={errors.displayName ? true : undefined} className={inputClass} />
       </Field>
-      <PasswordField id="password" label="Temporary password" value={values.password} onChange={(password) => setValues((current) => ({ ...current, password }))} error={errors.password} />
-
-      <fieldset className="flex flex-col gap-5 rounded-theme border border-line p-4">
-        <legend className="px-1 text-sm font-medium">Initial museum (optional)</legend>
-        <Field id="museumTitle" label="Museum title" error={errors.museumTitle} hint="Leave empty to let the client create their museum on first sign-in.">
-          <input id="museumTitle" value={values.museumTitle} onChange={set("museumTitle")} maxLength={120} aria-describedby="museumTitle-note" aria-invalid={errors.museumTitle ? true : undefined} className={inputClass} />
-        </Field>
-        <Field id="museumSlug" label="Museum address" error={errors.museumSlug} hint={`Public link: /m/${values.museumSlug || "address"}`}>
-          <input id="museumSlug" value={values.museumSlug} onChange={set("museumSlug")} maxLength={40} autoCapitalize="none" spellCheck={false} aria-describedby="museumSlug-note" aria-invalid={errors.museumSlug ? true : undefined} className={`${inputClass} font-mono`} />
-        </Field>
-      </fieldset>
+      <PasswordField id="password" label={t("adm.fieldTempPassword")} value={values.password} onChange={(password) => setValues((current) => ({ ...current, password }))} error={errors.password} />
 
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={pending} className={btnPrimary}>
           {pending ? <Spinner /> : null}
-          Create client
+          {t("adm.createClient")}
         </button>
         <Link href="/admin/clients" className={btnSecondary}>
-          Cancel
+          {t("common.cancel")}
         </Link>
       </div>
     </form>

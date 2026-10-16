@@ -2,19 +2,27 @@
 
 import { LayoutDashboard, Landmark, Users } from "lucide-react";
 import { BottomNav, SidebarNav, type NavItem } from "@/components/ui/PanelNav";
+import { useI18n } from "@/lib/i18n/provider";
 
 // Icons are functions, so the item list must be created on the client side of
 // the boundary instead of being passed down from the server layout.
-const ADMIN_ITEMS: readonly NavItem[] = [
-  { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
-  { href: "/admin/clients", label: "Clients", icon: Users, exact: false },
-  { href: "/admin/museums", label: "Museums", icon: Landmark, exact: false },
-];
+function useAdminItems(): NavItem[] {
+  const { t } = useI18n();
+  return [
+    { href: "/admin", label: t("nav.overview"), icon: LayoutDashboard, exact: true },
+    { href: "/admin/clients", label: t("nav.clients"), icon: Users, exact: false },
+    { href: "/admin/museums", label: t("nav.museums"), icon: Landmark, exact: false },
+  ];
+}
 
 export function AdminSidebar() {
-  return <SidebarNav items={ADMIN_ITEMS} label="Platform management" />;
+  const { t } = useI18n();
+  const items = useAdminItems();
+  return <SidebarNav items={items} label={t("nav.adminLabel")} />;
 }
 
 export function AdminBottomNav() {
-  return <BottomNav items={ADMIN_ITEMS} label="Platform management" />;
+  const { t } = useI18n();
+  const items = useAdminItems();
+  return <BottomNav items={items} label={t("nav.adminLabel")} />;
 }

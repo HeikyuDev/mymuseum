@@ -1,52 +1,59 @@
 import type { Metadata } from "next";
 import { ExternalLink, Search } from "lucide-react";
 import Link from "next/link";
-import { btnPrimary, btnSecondary, cardClass, EmptyState, inputClass, PageHeader } from "@/components/ui/panel";
-import { StatusBadge } from "@/components/studio/MuseumStatusBar";
-import { formatDate } from "@/components/admin/badges";
+import { LocalDate } from "@/components/admin/badges";
 import { Pagination } from "@/components/admin/Pagination";
-import { requireRole } from "@/lib/auth/session";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { btnPrimary, btnSecondary, cardClass, EmptyState, inputClass, PageHeader } from "@/components/ui/panel";
 import { parseMuseumParams } from "@/lib/admin/params";
 import { listMuseums } from "@/lib/admin/queries";
+import { requireRole } from "@/lib/auth/session";
+import { getT } from "@/lib/i18n/server";
 import { UnpublishButton } from "./UnpublishButton";
 
-export const metadata: Metadata = { title: "Museums" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t("nav.museums") };
+}
 
+// Read-only overview of every museum (each client owns exactly one). The only
+// action is taking a museum offline.
 export default async function MuseumsPage({ searchParams }: PageProps<"/admin/museums">) {
   await requireRole("super_admin");
+  const t = await getT();
   const params = parseMuseumParams(await searchParams);
   const { items, total } = await listMuseums(params);
   const filtered = params.q !== "" || params.status !== "all";
 
   return (
     <>
-      <PageHeader title="Museums" description="Every museum on the platform. Use force unpublish to take a museum offline." />
+      <PageHeader title={t("nav.museums")} description={t("adm.museumsDesc")} />
 
       <form method="get" role="search" className={`${cardClass} mb-4 grid gap-3 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end`}>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="q" className="text-sm font-medium">
-            Search
+            {t("adm.search")}
           </label>
-          <input id="q" name="q" defaultValue={params.q} placeholder="Title, address or owner" maxLength={80} className={inputClass} />
+          <input id="q" name="q" defaultValue={params.q} placeholder={t("adm.museumsSearchPlaceholder")} maxLength={80} className={inputClass} />
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="status" className="text-sm font-medium">
-            Status
+            {t("adm.status")}
           </label>
           <select id="status" name="status" defaultValue={params.status} className={inputClass}>
-            <option value="all">All</option>
-            <option value="published">Published</option>
-            <option value="draft">Draft</option>
+            <option value="all">{t("adm.all")}</option>
+            <option value="published">{t("status.published")}</option>
+            <option value="draft">{t("status.draft")}</option>
           </select>
         </div>
         <div className="flex gap-2">
           <button type="submit" className={btnPrimary}>
             <Search aria-hidden className="size-4" />
-            Apply
+            {t("adm.apply")}
           </button>
           {filtered ? (
             <Link href="/admin/museums" className={btnSecondary}>
-              Clear
+              {t("adm.clear")}
             </Link>
           ) : null}
         </div>
@@ -54,22 +61,22 @@ export default async function MuseumsPage({ searchParams }: PageProps<"/admin/mu
 
       {items.length === 0 ? (
         <EmptyState
-          title={filtered ? "No museums match" : "No museums yet"}
-          description={filtered ? "Try a different search or clear the filters." : "Museums appear here once clients create them."}
+          title={filtered ? t("adm.noMuseumsMatch") : t("adm.noMuseumsTitle")}
+          description={filtered ? t("adm.tryOtherSearch") : t("adm.noMuseumsBody")}
         />
       ) : (
         <div className={`${cardClass} overflow-x-auto`}>
           <table className="w-full min-w-[44rem] text-left text-sm">
-            <caption className="sr-only">Museums</caption>
+            <caption className="sr-only">{t("nav.museums")}</caption>
             <thead className="border-b border-line text-xs uppercase tracking-wide text-muted">
               <tr>
-                <th scope="col" className="px-4 py-3 font-medium">Museum</th>
-                <th scope="col" className="px-4 py-3 font-medium">Owner</th>
-                <th scope="col" className="px-4 py-3 font-medium">Artworks</th>
-                <th scope="col" className="px-4 py-3 font-medium">Status</th>
-                <th scope="col" className="px-4 py-3 font-medium">Created</th>
+                <th scope="col" className="px-4 py-3 font-medium">{t("adm.colMuseum")}</th>
+                <th scope="col" className="px-4 py-3 font-medium">{t("adm.colOwner")}</th>
+                <th scope="col" className="px-4 py-3 font-medium">{t("adm.colArtworks")}</th>
+                <th scope="col" className="px-4 py-3 font-medium">{t("adm.colStatus")}</th>
+                <th scope="col" className="px-4 py-3 font-medium">{t("adm.colCreated")}</th>
                 <th scope="col" className="px-4 py-3 font-medium">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t("adm.colActions")}</span>
                 </th>
               </tr>
             </thead>
@@ -78,7 +85,7 @@ export default async function MuseumsPage({ searchParams }: PageProps<"/admin/mu
                 <tr key={museum.id} className="align-top">
                   <td className="px-4 py-3">
                     <p className="font-medium">{museum.title}</p>
-                    <a href={`/m/${museum.slug}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-muted hover:text-fg">
+                    <a href={`/m/${museum.slug}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-muted hover:text-fg" aria-label={`${t("adm.openMuseum")}: /m/${museum.slug}`}>
                       /m/{museum.slug}
                       <ExternalLink aria-hidden className="size-3" />
                     </a>
@@ -90,14 +97,16 @@ export default async function MuseumsPage({ searchParams }: PageProps<"/admin/mu
                         <span className="block text-muted">{museum.owner.email}</span>
                       </Link>
                     ) : (
-                      <span className="text-muted">Unknown</span>
+                      <span className="text-muted">{t("common.unknown")}</span>
                     )}
                   </td>
                   <td className="px-4 py-3">{museum.artworkCount}</td>
                   <td className="px-4 py-3">
                     <StatusBadge published={museum.is_published} />
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-muted">{formatDate(museum.created_at)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-muted">
+                    <LocalDate iso={museum.created_at} />
+                  </td>
                   <td className="px-4 py-3 text-right">
                     {museum.is_published ? <UnpublishButton id={museum.id} title={museum.title} /> : null}
                   </td>
@@ -108,7 +117,7 @@ export default async function MuseumsPage({ searchParams }: PageProps<"/admin/mu
         </div>
       )}
 
-      <Pagination basePath="/admin/museums" page={params.page} total={total} noun="museum" query={{ q: params.q, status: params.status }} />
+      <Pagination basePath="/admin/museums" page={params.page} total={total} noun="museums" query={{ q: params.q, status: params.status }} />
     </>
   );
 }

@@ -1,17 +1,22 @@
 import type { Metadata } from "next";
 import { Plus, Search } from "lucide-react";
 import Link from "next/link";
-import { btnPrimary, btnSecondary, cardClass, EmptyState, inputClass, PageHeader } from "@/components/ui/panel";
-import { AccountStatusBadge, formatDate, RoleBadge } from "@/components/admin/badges";
+import { AccountStatusBadge, LocalDate, RoleBadge } from "@/components/admin/badges";
 import { Pagination } from "@/components/admin/Pagination";
-import { requireRole } from "@/lib/auth/session";
+import { btnPrimary, btnSecondary, cardClass, EmptyState, inputClass, PageHeader } from "@/components/ui/panel";
 import { parseClientParams } from "@/lib/admin/params";
 import { listClients } from "@/lib/admin/queries";
+import { requireRole } from "@/lib/auth/session";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Clients" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t("nav.clients") };
+}
 
 export default async function ClientsPage({ searchParams }: PageProps<"/admin/clients">) {
   await requireRole("super_admin");
+  const t = await getT();
   const params = parseClientParams(await searchParams);
   const { items, total } = await listClients(params);
   const filtered = params.q !== "" || params.status !== "all" || params.role !== "all";
@@ -19,12 +24,12 @@ export default async function ClientsPage({ searchParams }: PageProps<"/admin/cl
   return (
     <>
       <PageHeader
-        title="Clients"
-        description="Every account on the platform, with their museum."
+        title={t("nav.clients")}
+        description={t("adm.clientsDesc")}
         actions={
           <Link href="/admin/clients/new" className={btnPrimary}>
             <Plus aria-hidden className="size-4" />
-            New client
+            {t("adm.newClient")}
           </Link>
         }
       />
@@ -32,38 +37,38 @@ export default async function ClientsPage({ searchParams }: PageProps<"/admin/cl
       <form method="get" role="search" className={`${cardClass} mb-4 grid gap-3 p-4 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end`}>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="q" className="text-sm font-medium">
-            Search
+            {t("adm.search")}
           </label>
-          <input id="q" name="q" defaultValue={params.q} placeholder="Email, name or museum address" maxLength={80} className={inputClass} />
+          <input id="q" name="q" defaultValue={params.q} placeholder={t("adm.clientsSearchPlaceholder")} maxLength={80} className={inputClass} />
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="status" className="text-sm font-medium">
-            Status
+            {t("adm.status")}
           </label>
           <select id="status" name="status" defaultValue={params.status} className={inputClass}>
-            <option value="all">All</option>
-            <option value="active">Active</option>
-            <option value="disabled">Disabled</option>
+            <option value="all">{t("adm.all")}</option>
+            <option value="active">{t("adm.active")}</option>
+            <option value="disabled">{t("adm.disabled")}</option>
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="role" className="text-sm font-medium">
-            Role
+            {t("adm.role")}
           </label>
           <select id="role" name="role" defaultValue={params.role} className={inputClass}>
-            <option value="all">All</option>
-            <option value="owner">Client</option>
-            <option value="super_admin">Super admin</option>
+            <option value="all">{t("adm.all")}</option>
+            <option value="owner">{t("adm.roleClient")}</option>
+            <option value="super_admin">{t("adm.roleAdmin")}</option>
           </select>
         </div>
         <div className="flex gap-2">
           <button type="submit" className={btnPrimary}>
             <Search aria-hidden className="size-4" />
-            Apply
+            {t("adm.apply")}
           </button>
           {filtered ? (
             <Link href="/admin/clients" className={btnSecondary}>
-              Clear
+              {t("adm.clear")}
             </Link>
           ) : null}
         </div>
@@ -71,64 +76,61 @@ export default async function ClientsPage({ searchParams }: PageProps<"/admin/cl
 
       {items.length === 0 ? (
         <EmptyState
-          title={filtered ? "No clients match" : "No clients yet"}
-          description={filtered ? "Try a different search or clear the filters." : "Create the first client account to get started."}
+          title={filtered ? t("adm.noClientsMatch") : t("adm.noClientsTitle")}
+          description={filtered ? t("adm.tryOtherSearch") : t("adm.noClientsBody")}
         />
       ) : (
         <div className={`${cardClass} overflow-x-auto`}>
           <table className="w-full min-w-[40rem] text-left text-sm">
-            <caption className="sr-only">Clients</caption>
+            <caption className="sr-only">{t("nav.clients")}</caption>
             <thead className="border-b border-line text-xs uppercase tracking-wide text-muted">
               <tr>
-                <th scope="col" className="px-4 py-3 font-medium">Client</th>
-                <th scope="col" className="px-4 py-3 font-medium">Museum</th>
-                <th scope="col" className="px-4 py-3 font-medium">Artworks</th>
-                <th scope="col" className="px-4 py-3 font-medium">Status</th>
-                <th scope="col" className="px-4 py-3 font-medium">Created</th>
+                <th scope="col" className="px-4 py-3 font-medium">{t("adm.colClient")}</th>
+                <th scope="col" className="px-4 py-3 font-medium">{t("adm.colMuseum")}</th>
+                <th scope="col" className="px-4 py-3 font-medium">{t("adm.colArtworks")}</th>
+                <th scope="col" className="px-4 py-3 font-medium">{t("adm.colStatus")}</th>
+                <th scope="col" className="px-4 py-3 font-medium">{t("adm.colCreated")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {items.map(({ profile, museums }) => {
-                const artworks = museums.reduce((sum, museum) => sum + museum.artworkCount, 0);
-                return (
-                  <tr key={profile.id} className="align-top">
-                    <td className="px-4 py-3">
-                      <Link href={`/admin/clients/${profile.id}`} className="font-medium hover:underline">
-                        {profile.display_name || profile.email}
-                      </Link>
-                      <p className="text-muted">{profile.email}</p>
-                      {profile.role === "super_admin" ? (
-                        <div className="mt-1">
-                          <RoleBadge role={profile.role} />
-                        </div>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-3">
-                      {museums.length === 0 ? (
-                        <span className="text-muted">None</span>
-                      ) : (
-                        museums.map((museum) => (
-                          <p key={museum.id}>
-                            {museum.title} <span className="text-muted">/m/{museum.slug}</span>
-                            {museum.is_published ? "" : <span className="text-muted"> (draft)</span>}
-                          </p>
-                        ))
-                      )}
-                    </td>
-                    <td className="px-4 py-3">{artworks}</td>
-                    <td className="px-4 py-3">
-                      <AccountStatusBadge active={profile.is_active} />
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-muted">{formatDate(profile.created_at)}</td>
-                  </tr>
-                );
-              })}
+              {items.map(({ profile, museum }) => (
+                <tr key={profile.id} className="align-top">
+                  <td className="px-4 py-3">
+                    <Link href={`/admin/clients/${profile.id}`} className="font-medium hover:underline">
+                      {profile.display_name || profile.email}
+                    </Link>
+                    <p className="text-muted">{profile.email}</p>
+                    {profile.role === "super_admin" ? (
+                      <div className="mt-1">
+                        <RoleBadge role={profile.role} />
+                      </div>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-3">
+                    {museum ? (
+                      <p>
+                        {museum.title} <span className="text-muted">/m/{museum.slug}</span>
+                        {museum.is_published ? "" : <span className="text-muted"> {t("adm.draftSuffix")}</span>}
+                      </p>
+                    ) : (
+                      <span className="text-muted">{t("adm.none")}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">{museum?.artworkCount ?? 0}</td>
+                  <td className="px-4 py-3">
+                    <AccountStatusBadge active={profile.is_active} />
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-muted">
+                    <LocalDate iso={profile.created_at} />
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       )}
 
-      <Pagination basePath="/admin/clients" page={params.page} total={total} noun="account" query={{ q: params.q, status: params.status, role: params.role }} />
+      <Pagination basePath="/admin/clients" page={params.page} total={total} noun="clients" query={{ q: params.q, status: params.status, role: params.role }} />
     </>
   );
 }

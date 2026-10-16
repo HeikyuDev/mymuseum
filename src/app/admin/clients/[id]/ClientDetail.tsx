@@ -11,19 +11,21 @@ import {
   setClientActive,
   updateClientProfile,
 } from "@/app/admin/actions";
-import { btnDanger, btnPrimary, btnSecondary, cardClass, Field, inputClass, Spinner } from "@/components/ui/panel";
 import { CredentialsPanel } from "@/components/admin/CredentialsPanel";
+import { btnDanger, btnPrimary, btnSecondary, cardClass, Field, inputClass, Spinner } from "@/components/ui/panel";
 import { accountGuardError, isDeleteConfirmed } from "@/lib/admin/guards";
+import { useI18n } from "@/lib/i18n/provider";
 import type { UserRole } from "@/types/database";
 
 type Profile = { id: string; email: string; displayName: string; role: UserRole; isActive: boolean };
 type Museum = { id: string; title: string; slug: string; isPublished: boolean; hallCount: number; artworkCount: number };
 
-type Props = { profile: Profile; museums: Museum[]; isSelf: boolean; activeSuperAdmins: number };
+type Props = { profile: Profile; museum: Museum | null; isSelf: boolean; activeSuperAdmins: number };
 
 const sectionTitle = "font-display text-lg font-semibold";
 
-export function ClientDetail({ profile, museums, isSelf, activeSuperAdmins }: Props) {
+export function ClientDetail({ profile, museum, isSelf, activeSuperAdmins }: Props) {
+  const { t } = useI18n();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -58,14 +60,14 @@ export function ClientDetail({ profile, museums, isSelf, activeSuperAdmins }: Pr
         return;
       }
       setNameError(null);
-      toast.success("Name updated");
+      toast.success(t("adm.nameUpdated"));
       router.refresh();
     });
   }
 
   function saveEmail(event: React.FormEvent) {
     event.preventDefault();
-    if (!window.confirm(`Change the sign-in email to ${email.trim()}? The client must use the new address from now on.`)) return;
+    if (!window.confirm(t("adm.confirmEmail", { email: email.trim() }))) return;
     startTransition(async () => {
       const result = await changeClientEmail(profile.id, { email });
       if (!result.ok) {
@@ -75,16 +77,14 @@ export function ClientDetail({ profile, museums, isSelf, activeSuperAdmins }: Pr
       }
       setEmailError(null);
       setEmail(result.data.email);
-      toast.success("Email updated");
+      toast.success(t("adm.emailUpdated"));
       router.refresh();
     });
   }
 
   function toggleActive() {
     const next = !profile.isActive;
-    const message = next
-      ? `Enable ${profile.email}? They will be able to sign in again.`
-      : `Disable ${profile.email}? They will be signed out and unable to sign in.`;
+    const message = next ? t("adm.confirmEnable", { email: profile.email }) : t("adm.confirmDisable", { email: profile.email });
     if (!window.confirm(message)) return;
     startTransition(async () => {
       const result = await setClientActive(profile.id, next);
@@ -93,13 +93,13 @@ export function ClientDetail({ profile, museums, isSelf, activeSuperAdmins }: Pr
         return;
       }
       if (result.data.warning) toast.warning(result.data.warning);
-      else toast.success(next ? "Account enabled" : "Account disabled");
+      else toast.success(next ? t("adm.accountEnabled") : t("adm.accountDisabled"));
       router.refresh();
     });
   }
 
   function resetPassword() {
-    if (!window.confirm(`Generate a new temporary password for ${profile.email}? The current password stops working immediately.`)) return;
+    if (!window.confirm(t("adm.confirmReset", { email: profile.email }))) return;
     startTransition(async () => {
       const result = await resetClientPassword(profile.id);
       if (!result.ok) {
@@ -107,7 +107,7 @@ export function ClientDetail({ profile, museums, isSelf, activeSuperAdmins }: Pr
         return;
       }
       setCredentials(result.data);
-      toast.success("Password reset");
+      toast.success(t("adm.passwordReset"));
     });
   }
 
@@ -122,7 +122,7 @@ export function ClientDetail({ profile, museums, isSelf, activeSuperAdmins }: Pr
         return;
       }
       if (result.data.warning) toast.warning(result.data.warning);
-      else toast.success("Client deleted");
+      else toast.success(t("adm.clientDeleted"));
       router.push("/admin/clients");
       router.refresh();
     });
@@ -132,7 +132,7 @@ export function ClientDetail({ profile, museums, isSelf, activeSuperAdmins }: Pr
     <div className="flex max-w-3xl flex-col gap-6">
       {credentials ? (
         <CredentialsPanel
-          title="New temporary password"
+          title={t("adm.newTempPassword")}
           email={credentials.email}
           password={credentials.password}
           onDismiss={() => setCredentials(null)}
@@ -140,94 +140,87 @@ export function ClientDetail({ profile, museums, isSelf, activeSuperAdmins }: Pr
       ) : null}
 
       <form onSubmit={saveName} className={`${cardClass} flex flex-col gap-4 p-5`} noValidate>
-        <h2 className={sectionTitle}>Profile</h2>
-        <Field id="displayName" label="Display name" error={nameError}>
+        <h2 className={sectionTitle}>{t("adm.profile")}</h2>
+        <Field id="displayName" label={t("adm.fieldName")} error={nameError}>
           <input id="displayName" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} aria-describedby="displayName-note" aria-invalid={nameError ? true : undefined} className={inputClass} />
         </Field>
         <div>
           <button type="submit" disabled={pending || name.trim() === profile.displayName} className={btnPrimary}>
             {pending ? <Spinner /> : null}
-            Save name
+            {t("adm.saveName")}
           </button>
         </div>
       </form>
 
       <section className={`${cardClass} flex flex-col gap-3 p-5`} aria-labelledby="access">
         <h2 id="access" className={sectionTitle}>
-          Access
+          {t("adm.access")}
         </h2>
-        <p className="text-sm text-muted">
-          {profile.isActive
-            ? "This account can sign in. Disabling it blocks sign-in and ends existing sessions."
-            : "This account is disabled and cannot sign in."}
-        </p>
-        {profile.isActive && disableBlock ? <p className="text-sm text-amber-900">{disableBlock}</p> : null}
+        <p className="text-sm text-muted">{profile.isActive ? t("adm.accessActive") : t("adm.accessDisabled")}</p>
+        {profile.isActive && disableBlock ? <p className="text-sm text-amber-900">{t(disableBlock)}</p> : null}
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={toggleActive} disabled={pending || (profile.isActive && !!disableBlock)} className={profile.isActive ? btnDanger : btnPrimary}>
-            {profile.isActive ? "Disable account" : "Enable account"}
+            {profile.isActive ? t("adm.disableAccount") : t("adm.enableAccount")}
           </button>
           <button type="button" onClick={resetPassword} disabled={pending} className={btnSecondary}>
             <KeyRound aria-hidden className="size-4" />
-            Reset password
+            {t("adm.resetPassword")}
           </button>
         </div>
       </section>
 
       <form onSubmit={saveEmail} className={`${cardClass} flex flex-col gap-4 p-5`} noValidate>
-        <h2 className={sectionTitle}>Sign-in email</h2>
-        <Field id="email" label="Email" error={emailError} hint="The new address is confirmed automatically; no email is sent.">
+        <h2 className={sectionTitle}>{t("adm.signInEmail")}</h2>
+        <Field id="email" label={t("adm.fieldEmail")} error={emailError} hint={t("adm.emailHint")}>
           <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" aria-describedby="email-note" aria-invalid={emailError ? true : undefined} className={inputClass} />
         </Field>
         <div>
           <button type="submit" disabled={pending || email.trim().toLowerCase() === profile.email.toLowerCase()} className={btnSecondary}>
-            Change email
+            {t("adm.changeEmail")}
           </button>
         </div>
       </form>
 
-      <section className={`${cardClass} p-5`} aria-labelledby="museums">
-        <h2 id="museums" className={sectionTitle}>
-          Museums
+      <section className={`${cardClass} p-5`} aria-labelledby="museum">
+        <h2 id="museum" className={sectionTitle}>
+          {t("adm.museumSection")}
         </h2>
-        {museums.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">No museum yet. The client creates one on first sign-in.</p>
+        {museum ? (
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{museum.title}</p>
+              <p className="text-sm text-muted">
+                {t("adm.museumStats", {
+                  halls: museum.hallCount,
+                  artworks: museum.artworkCount,
+                  status: museum.isPublished ? t("status.published") : t("status.draft"),
+                })}
+              </p>
+            </div>
+            <a href={`/m/${museum.slug}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-text" aria-label={t("adm.openMuseum")}>
+              /m/{museum.slug}
+              <ExternalLink aria-hidden className="size-3.5" />
+            </a>
+          </div>
         ) : (
-          <ul className="mt-2 divide-y divide-line">
-            {museums.map((museum) => (
-              <li key={museum.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{museum.title}</p>
-                  <p className="text-sm text-muted">
-                    {museum.hallCount} hall{museum.hallCount === 1 ? "" : "s"} · {museum.artworkCount} artwork{museum.artworkCount === 1 ? "" : "s"} ·{" "}
-                    {museum.isPublished ? "Published" : "Draft"}
-                  </p>
-                </div>
-                <a href={`/m/${museum.slug}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-text">
-                  /m/{museum.slug}
-                  <ExternalLink aria-hidden className="size-3.5" />
-                </a>
-              </li>
-            ))}
-          </ul>
+          <p className="mt-2 text-sm text-muted">{t("adm.noMuseumBody")}</p>
         )}
       </section>
 
       <form onSubmit={remove} className={`${cardClass} flex flex-col gap-4 border-red-300 p-5`} noValidate>
-        <h2 className={`${sectionTitle} text-red-700`}>Delete client</h2>
-        <p className="text-sm text-muted">
-          Permanently deletes the account, its museums, halls, artworks and uploaded files. This cannot be undone.
-        </p>
+        <h2 className={`${sectionTitle} text-red-700`}>{t("adm.deleteClient")}</h2>
+        <p className="text-sm text-muted">{t("adm.deleteBody")}</p>
         {deleteBlock ? (
-          <p className="text-sm text-amber-900">{deleteBlock}</p>
+          <p className="text-sm text-amber-900">{t(deleteBlock)}</p>
         ) : (
-          <Field id="confirmation" label={`Type ${profile.email} to confirm`} error={deleteError}>
+          <Field id="confirmation" label={t("adm.typeToConfirm", { email: profile.email })} error={deleteError}>
             <input id="confirmation" value={confirmation} onChange={(e) => setConfirmation(e.target.value)} autoComplete="off" spellCheck={false} aria-describedby="confirmation-note" aria-invalid={deleteError ? true : undefined} className={inputClass} />
           </Field>
         )}
         <div>
           <button type="submit" disabled={pending || !!deleteBlock || !deleteReady} className={btnDanger}>
             {pending ? <Spinner /> : <Trash2 aria-hidden className="size-4" />}
-            Delete permanently
+            {t("adm.deletePermanently")}
           </button>
         </div>
       </form>
