@@ -1,4 +1,5 @@
 // Hand-written types matching supabase/migrations/20261016000000_initial_schema.sql
+// and supabase/migrations/20261016120000_museum_theme.sql
 
 export type UserRole = "super_admin" | "owner";
 export type FontPairing = "classic" | "modern" | "editorial" | "handwritten";
@@ -11,7 +12,21 @@ export type WallStyle =
   | "velvet"
   | "linen"
   | "custom_color";
+export type ThemePreset =
+  | "dark_elegant"
+  | "light_modern"
+  | "warm_classic"
+  | "midnight_blue"
+  | "minimal_mono";
 export type FloorStyle = "parquet" | "marble" | "concrete" | "carpet" | "dark_wood";
+export type FloorDecoration =
+  | "none"
+  | "red_carpet"
+  | "runner_gold_trim"
+  | "rug_persian"
+  | "rug_geometric"
+  | "spotlight_pool";
+export type Json = string | number | boolean | null | Json[] | { [key: string]: Json | undefined };
 export type LightingPreset = "warm" | "cold" | "dramatic" | "soft";
 export type FrameStyle =
   | "minimal"
@@ -46,6 +61,8 @@ export type MuseumRow = {
   is_published: boolean;
   accent_color: string;
   font_pairing: FontPairing;
+  theme_preset: ThemePreset;
+  theme_overrides: Json;
   default_hall_id: string | null;
   cover_image_path: string | null;
   created_at: string;
@@ -65,6 +82,9 @@ export type HallRow = {
   wall_style: WallStyle;
   wall_color: string | null;
   floor_style: FloorStyle;
+  floor_decoration: FloorDecoration;
+  floor_decoration_color: string | null;
+  decor: Json;
   lighting_preset: LightingPreset;
   default_frame_style: FrameStyle;
   accent_color: string | null;
