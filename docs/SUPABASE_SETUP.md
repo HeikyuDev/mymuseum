@@ -10,6 +10,7 @@ Run the files in `supabase/migrations/` in this order:
 1. `20261016000000_initial_schema.sql` - tables, RLS, helper functions, auth trigger, `artworks` bucket.
 2. `20261016120000_museum_theme.sql` - museum theme preset/overrides, hall floor decorations and decor bag.
 3. `20261017000000_artwork_frame_nullable.sql` - artworks may inherit the hall's default frame style.
+4. `20261018000000_one_museum_per_user.sql` - unique index on `museums(owner_id)`: one museum per user. If a user already owns several museums it stops with a message and changes nothing; remove or reassign the extras (`select owner_id, count(*), array_agg(slug) from public.museums group by owner_id having count(*) > 1;`) and run it again.
 
 Option A, SQL editor: open **SQL Editor**, paste each file in order and click **Run**.
 
@@ -50,7 +51,7 @@ where email = 'you@example.com';
 ## 6. Optional demo data
 After step 5, run `supabase/seed.sql` in the SQL editor. It creates a published
 `demo-museum` with the halls "Family" and "Friends". It does nothing if no
-super admin exists.
+super admin exists or if that super admin already owns a museum.
 
 ## 7. Verify RLS
 - Anonymous (anon key) can read only published museums, visible halls and active artworks:
@@ -66,4 +67,4 @@ super admin exists.
 
 ## Notes
 - Deleting a hall keeps its artworks (`hall_id` becomes null).
-- Client accounts are created from the super admin area (`/super/clients/new`); the service role key must be set for that.
+- Client accounts are created from the platform admin area (`/admin/clients/new`); the service role key must be set for that. Creating a client does not create a museum: each client creates their only museum from `/studio` on first sign-in.

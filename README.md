@@ -4,27 +4,34 @@
 
 # MyMuseum
 
-MyMuseum is a multi-tenant platform for virtual museums. Each client gets their own museum with halls (categories), framed artworks and a fully customizable look, published at a public link.
+MyMuseum is a multi-tenant platform for virtual museums. The platform owner creates client accounts; each client signs in and creates **their own museum** (exactly one per account) with categories (halls), framed artworks and a fully customizable look, published at a public link.
 
 - **Halls and artworks**: a museum is a sequence of halls; each hall holds framed artworks with title, author, year and description.
 - **3D viewer**: visitors open `/m/[slug]` straight inside one continuous museum, rendered in real time with react-three-fiber. The camera runs on rails (no free movement): arrow buttons, the keyboard or a click on an artwork glide it between works and through the archways that separate halls.
 - **Customization**: museum theme presets, accent color and font pairing; per-hall wall, floor, lighting, frame style and floor decorations (carpets, rugs, spotlight pool) plus decor such as rope barriers, benches and plants.
-- **Live preview**: the admin editors render the same 3D scene (embedded, light quality) while you edit.
-- **Languages**: the viewer is Spanish by default with an English toggle (`lang` cookie, optional per-museum default).
+- **Live preview**: the studio editors render the same 3D scene (embedded, light quality) while you edit.
+- **Languages**: everything is Spanish by default with an English alternative: the login page, the platform admin, the studio and the public viewer. An ES/EN switch (`lang` cookie) sits on the login page and in both panel headers; each museum also has a default language for its visitors (Studio > Settings).
 - **Image export**: a real photograph of the 3D museum taken at the artwork's spot (Story 9:16, Post 4:5 or Square 1:1). See [Image export](#image-export).
 
 ## Areas and roles
 
 | Area | Path | Who | Purpose |
 | --- | --- | --- | --- |
-| Super admin | `/super` | `super_admin` | Onboard clients, manage accounts and museums |
-| Museum admin | `/admin` | any active signed-in user (normally `owner`) | Manage own museum: halls, artworks, appearance, settings, publishing |
+| Platform admin | `/admin` | `super_admin` only | Create and manage client accounts, see every museum (read-only), force unpublish |
+| Studio | `/studio` | any active signed-in user | The owner's panel for their one museum: overview, categories, artworks, style, settings, publishing |
 | Public viewer | `/m/[slug]` | anyone | Visit a published museum |
 | Login | `/login` | anyone | Email and password sign-in; redirects by role |
+| Landing | `/` | anyone | A quiet welcome page with a sign-in button |
+
+Sign-in lands a `super_admin` on `/admin` and everybody else on `/studio`. A `super_admin` can also open `/studio` for a museum of their own. A client who opens `/admin` is sent to `/studio`. `/super/*` is the former name of the platform admin and redirects permanently to `/admin/*`; old owner URLs under `/admin` are not redirected (that path now means the platform admin).
 
 Roles live in `public.profiles.role` (`super_admin` or `owner`). They are never read from user metadata. Disabled accounts (`is_active = false`) cannot sign in and are signed out on their next request.
 
-Super admin features: platform overview, searchable client list, create client (temporary password shown once), edit name, enable/disable, reset password, change email, delete client with typed confirmation (also removes their Storage files), museum list with force unpublish. Impersonation is intentionally not implemented.
+**One museum per user.** A unique index on `museums.owner_id` enforces it. Creating a client never creates a museum: on first sign-in the client sees a short onboarding (museum name, public address with a live availability check, and the name of a starter category) and creates it exactly once. There is no museum selector anywhere.
+
+Platform admin features: overview, searchable client list, create client (generated temporary password shown once), edit name, enable/disable, reset password, change email, delete client with typed confirmation (also removes their Storage files), and a read-only museum list with force unpublish. Impersonation is intentionally not implemented.
+
+In the Spanish interface halls are called **Categorías** and the accounts of the platform **Clientes**; in English they are "categories" and "clients" (the code and the database still say `halls`).
 
 ## Architecture
 
@@ -39,8 +46,8 @@ flowchart LR
 
 - **Next.js 16 App Router**, React 19, Tailwind CSS 4, `motion` for animation, `sonner` for toasts, Zod 4 for validation.
 - **Supabase** provides Auth (credentials live in `auth.users` only), Postgres with Row Level Security and the public `artworks` Storage bucket.
-- **`src/proxy.ts`** refreshes the session cookie and sends anonymous visitors of `/admin` and `/super` to `/login`. It is only a first line of defence: every page, query and server action verifies the user with `supabase.auth.getUser()` and the role from `profiles` again (`src/lib/auth/session.ts`).
-- **Server actions** (`src/app/admin/actions`, `src/app/super/actions.ts`) validate input with Zod, check ownership or role, then mutate. Errors are mapped to safe messages.
+- **`src/proxy.ts`** refreshes the session cookie and sends anonymous visitors of `/admin` and `/studio` to `/login?next=...` (`src/lib/auth/redirects.ts`, unit tested). It is only a first line of defence: every page, query and server action verifies the user with `supabase.auth.getUser()` and the role from `profiles` again (`src/lib/auth/session.ts`: `requireUser`, `requireRole`, `getOwnMuseum`, `requireMuseum`).
+- **Server actions** (`src/app/studio/actions`, `src/app/admin/actions.ts`) validate input with Zod, check ownership or role, then mutate. Failures are localized on the server with the request language (`src/lib/action-result.ts`); pure validation helpers return message codes (`val.*`) that the UI translates.
 - **Theme pipeline**: database rows are resolved into render-ready values and then CSS variables.
 
 ```text
@@ -50,36 +57,39 @@ halls.wall_style / floor_style / floor_decoration / lighting / frame / decor
         -> resolveHallStyle()    (src/lib/hall-style.ts) -> 3D scene (src/components/gallery)
 ```
 
-The admin area uses the same tokens with a fixed neutral palette (`src/lib/admin/theme.ts`), so it stays readable whatever a museum looks like.
+Both panels use the same tokens with a fixed neutral light palette (`src/lib/panel-theme.ts`), so they stay readable whatever a museum looks like.
 
 ## Project structure
 
 ```text
 src/
   app/
-    page.tsx             landing placeholder
+    page.tsx             landing page
     login/               sign-in form, server actions, disabled-account route
-    admin/               museum admin: overview, halls, artworks, appearance, settings
+    studio/              owner panel: overview, categories, artworks, style, settings
       actions/           server actions (museum, halls, artworks)
-    super/               super admin: overview, clients, museums, server actions
+    admin/               platform admin: overview, clients, museums, server actions
     m/[slug]/            public viewer
   components/
-    admin/               shared admin UI (buttons, fields, nav, previews, pickers)
-    super/               super admin UI (password field, credentials panel, pagination)
+    ui/                  shared panel UI (buttons, fields, nav, language switcher, status badge)
+    studio/              studio UI (pickers, previews, onboarding, save bar, share card)
+    admin/               platform admin UI (password field, credentials panel, pagination, badges)
     gallery/             3D museum: scene, camera rail, frames, portals, lighting, export
     viewer/              CSS frame and wall previews used by the admin pickers
   lib/
-    auth/                getAuthState/requireUser/requireRole, redirect safety
+    auth/                getAuthState/requireUser/requireRole/getOwnMuseum, route areas and redirect safety
+    action-result.ts     localized server-action results
+    panel-theme.ts       fixed theme of the panels
     supabase/            server, browser and service-role clients, storage URLs
-    admin/               admin queries, action helpers, admin theme
-    super/               super admin queries, guards, validation, password generator
+    studio/              owner data access (own halls and artworks), action helpers, override merging
+    admin/               platform admin queries, guards, validation, password generator
     validation/          Zod schemas and slug rules (reserved slugs)
     theme.ts             museum theme presets and CSS variable resolution
     hall-style.ts        hall style options and resolution
     viewer-model.ts      pure viewer data model
     gallery/             pure 3D logic: layout engine, camera rail math, quality tiers, scene look
     photo/               export formats, safe zones, photographic composition
-    i18n/                es/en dictionaries, typed t(), locale cookie, switch action
+    i18n/                es/en dictionaries (viewer + panels), typed t(), message codes, formatting, locale cookie
   proxy.ts               session refresh and first-line route protection
   types/database.ts      hand-written row types matching the migrations
 supabase/
@@ -95,11 +105,11 @@ docs/
 | Table | Key columns |
 | --- | --- |
 | `profiles` | `id` (= `auth.users.id`), `email`, `display_name`, `role`, `is_active` |
-| `museums` | `owner_id`, `slug` (unique, validated, reserved words blocked), `title`, `is_published`, theme columns, `default_hall_id`, `cover_image_path` |
+| `museums` | `owner_id` (unique: one museum per user), `slug` (unique, validated, reserved words blocked), `title`, `is_published`, theme columns, `default_hall_id`, `cover_image_path` |
 | `halls` | `museum_id`, `name`, `slug`, `sort_order`, wall/floor/lighting/frame styles, `floor_decoration`, `decor`, `is_visible` |
 | `artworks` | `museum_id`, `hall_id` (nullable), `title`, `image_path`, aspect ratio, frame options, `sort_order`, `is_active` |
 
-Deleting a user cascades to their profile, museums, halls and artworks. Deleting a hall only unassigns its artworks.
+Deleting a user cascades to their profile, museum, halls and artworks. Deleting a hall only unassigns its artworks.
 
 Security model:
 
@@ -125,15 +135,15 @@ GalleryScene (src/components/gallery): lights, camera rail, zones, portals, artw
 - **Light.** A pool of spotlights follows the artworks nearest the camera (only a few cast shadows), plus hemisphere and fill light blended across halls. The museum theme preset tints the room.
 - **Quality tiers** (`src/lib/gallery/quality.ts`): `low`, `medium` and `high` are chosen from the device (memory, cores, pointer, software renderer). Low drops shadows, reflections and props; high adds soft shadows and a floor reflection. `?quality=low|medium|high` forces a tier. Rendering is on demand: a resting camera costs no GPU time, offscreen admin previews are paused, textures are capped per tier and only loaded near the camera, and shaders are compiled in parallel behind the loading screen.
 - **Fallback.** Without WebGL, visitors see a notice and a plain list of the artworks.
-- **Languages.** Strings live in `src/lib/i18n` (Spanish default). The `lang` cookie is set by a server action; `theme_overrides.defaultLocale` (`es` or `en`) is the museum default for visitors without a cookie.
+- **Languages.** Strings live in `src/lib/i18n` (Spanish default; `dictionaries.ts` for the viewer, `panel-es.ts`/`panel-en.ts` for the login page and both panels; a test keeps both languages on the same keys and placeholders). The `lang` cookie is set by a server action; `theme_overrides.defaultLocale` (`es` or `en`, edited in Studio > Settings and validated with Zod; rows without it fall back to `es`) is the museum default for visitors without a cookie.
 
 ## Image export
 
 Every artwork can be exported as a photograph of the museum: the same 3D scene the visitor walks through, shot from a camera standing at the artwork's spot with the real walls, floor, carpet, lighting, frame and placard. Nothing is invented and nothing is uploaded; the picture is rendered in the browser.
 
 - **Visitors**: one **Download image** button in the viewer. They only pick a format (Story 9:16 at 1080x1920 with the top 250 px and bottom 340 px kept clear, Post 4:5 at 1080x1350, Square 1:1 at 1080x1080). The title appears on the in-scene placard; a small museum watermark sits at the bottom of the safe area.
-- **Owners** (admin, artworks list and editor): the same dialog with a few real scene choices: lighting preset, vignette, film grain, watermark and JPEG. The editor exports the unsaved frame and mat choices.
-- **Access control**: `museums.theme_overrides.allowVisitorExport` (default `true`) turns visitor downloads off in **Admin > Appearance > Sharing**. Owners can always export.
+- **Owners** (studio, artworks list and editor): the same dialog with a few real scene choices: lighting preset, vignette, film grain, watermark and JPEG. The editor exports the unsaved frame and mat choices.
+- **Access control**: `museums.theme_overrides.allowVisitorExport` (default `true`) turns visitor downloads off in **Studio > Style > Sharing**. Owners can always export.
 - **Share or download**: the Web Share API with a file where supported, otherwise a download named `{museum}-{artwork}-{format}.png`.
 
 How it works (`src/components/gallery/export`, `src/lib/photo`):
@@ -165,6 +175,7 @@ Prerequisites: Node.js 20 or newer, npm, and a [Supabase](https://supabase.com) 
    1. `supabase/migrations/20261016000000_initial_schema.sql`
    2. `supabase/migrations/20261016120000_museum_theme.sql`
    3. `supabase/migrations/20261017000000_artwork_frame_nullable.sql`
+   4. `supabase/migrations/20261018000000_one_museum_per_user.sql` - one museum per user. It stops with an explanation if any user already owns more than one museum (delete or move the extras, then run it again).
 
    Full walkthrough, including RLS checks: [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md).
 
@@ -184,15 +195,15 @@ Prerequisites: Node.js 20 or newer, npm, and a [Supabase](https://supabase.com) 
    where email = 'you@example.com';
    ```
 
-5. Start the dev server and sign in at <http://localhost:3000/login>. You land on `/super`.
+5. Start the dev server and sign in at <http://localhost:3000/login>. You land on `/admin`.
 
    ```bash
    npm run dev
    ```
 
-6. Create a first client at `/super/clients/new`: email, display name and a generated temporary password, optionally an initial museum title and address. Copy the credentials shown once and give them to the client, who signs in at `/login` and lands on `/admin`.
+6. Create a first client at `/admin/clients/new`: email, display name and a generated temporary password. Copy the credentials shown once and give them to the client. They sign in at `/login`, land on `/studio` and create their own museum there. The interface is in Spanish; use the ES/EN switch for English.
 
-Optional: run `supabase/seed.sql` in the SQL editor for a published `demo-museum` (requires a super admin).
+Optional: run `supabase/seed.sql` in the SQL editor for a published `demo-museum` (requires a super admin who does not own a museum yet).
 
 ## Scripts
 
@@ -222,7 +233,7 @@ The app deploys to [Vercel](https://vercel.com) as a standard Next.js project.
 | 4 | Super admin: client onboarding and account management | Done |
 | 5 | Image export of an artwork (replaced in 6A by real 3D photographs) | Done |
 | 6A | Real-time 3D viewer on rails, Spanish/English viewer, 3D admin previews and photo export | Done |
-| 6B | Admin route and role restructuring, one museum per user, admin translation | Planned |
+| 6B | Platform admin at `/admin`, owner studio at `/studio`, one museum per user, Spanish-first panels | Done |
 
 Known gaps: storage usage per museum is not tracked, and there is no self-service password change for clients yet.
 
