@@ -1,13 +1,14 @@
 "use client";
 
-import { useReducedMotion } from "motion/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
-import { HallScene } from "@/components/viewer/HallScene";
-import { MuseumExperience } from "@/components/viewer/MuseumExperience";
+import { GalleryEmbed } from "@/components/gallery/GalleryEmbed";
+import { buildLayout } from "@/lib/gallery/layout";
+import { galleryZones, toLayoutZones } from "@/lib/gallery/zones";
 import type { ResolvedHallStyle } from "@/lib/hall-style";
+import { useI18n } from "@/lib/i18n/provider";
 import type { ResolvedMuseumTheme } from "@/lib/theme";
-import type { ViewerArtwork, ViewerHall, ViewerMuseum } from "@/lib/viewer-model";
+import type { ViewerArtwork, ViewerMuseum } from "@/lib/viewer-model";
 import { btnSecondary } from "./ui";
 import { sampleViewerArtworks } from "./sample-art";
 
@@ -19,65 +20,71 @@ type HallPreviewProps = {
   artworks: ViewerArtwork[];
 };
 
+function StepButtons({ index, count, onChange }: { index: number; count: number; onChange: (index: number) => void }) {
+  const { t } = useI18n();
+  return (
+    <span className="flex gap-1">
+      <button type="button" className={`${btnSecondary} !min-h-9 !px-2`} disabled={index <= 0} onClick={() => onChange(index - 1)} aria-label={t("viewer.previous")}>
+        <ChevronLeft aria-hidden className="size-4" />
+      </button>
+      <button type="button" className={`${btnSecondary} !min-h-9 !px-2`} disabled={index >= count - 1} onClick={() => onChange(index + 1)} aria-label={t("viewer.next")}>
+        <ChevronRight aria-hidden className="size-4" />
+      </button>
+    </span>
+  );
+}
+
 /**
- * Live hall preview: the real HallScene fed with unsaved form state, contained
- * and non-navigating (no neighbouring doors, details or hall switching).
+ * Live hall preview: the real 3D scene (embedded variant) fed with unsaved form
+ * state. Only the previous/next buttons below navigate it.
  */
 export function HallPreview({ theme, name, style, artworks }: HallPreviewProps) {
-  const reduced = useReducedMotion() ?? false;
+  const { t } = useI18n();
   const usingSamples = artworks.length === 0;
-  const shown = useMemo(
-    () => (usingSamples ? sampleViewerArtworks(style.defaultFrameStyle) : artworks),
-    [usingSamples, artworks, style.defaultFrameStyle],
-  );
+  const shown = useMemo(() => (usingSamples ? sampleViewerArtworks(style.defaultFrameStyle) : artworks), [usingSamples, artworks, style.defaultFrameStyle]);
   const [requestedSlot, setSlot] = useState(0);
   const slot = Math.min(requestedSlot, shown.length - 1);
 
-  const hall: ViewerHall = { id: "preview", name, description: null, style, coverUrl: null, artworks: shown };
+  const museum = useMemo(
+    () => ({
+      title: name || "Hall",
+      theme,
+      halls: [{ id: "preview", name: name || "Hall", description: null, style, coverUrl: null, artworks: shown }],
+      otherArtworks: [],
+    }),
+    [name, theme, style, shown],
+  );
 
   return (
     <figure className="m-0 flex flex-col gap-2">
-      <div
-        className="relative h-[300px] overflow-hidden rounded-theme border border-line bg-canvas sm:h-[360px]"
-        style={theme.cssVars}
-        role="img"
-        aria-label={`Live preview of ${name || "the hall"}`}
-      >
-        <HallScene
-          hall={hall}
-          slot={slot}
-          prevHall={null}
-          nextHall={null}
-          reduced={reduced}
-          spring={theme.spring}
-          onSelect={setSlot}
-          onEnter={() => {}}
-          onOpen={() => {}}
-        />
+      <div className="relative h-[300px] overflow-hidden rounded-theme border border-line bg-canvas sm:h-[360px]" style={theme.cssVars}>
+        {/* stop 0 is the hall entrance; artworks follow */}
+        <GalleryEmbed museum={museum} stopIndex={slot + 1} label={t("viewer.preview")} />
       </div>
       <figcaption className="flex items-center justify-between gap-2">
-        <span className="text-xs text-muted">{usingSamples ? "Showing sample artworks." : "Live preview with your artworks."}</span>
-        <span className="flex gap-1">
-          <button type="button" className={`${btnSecondary} !min-h-9 !px-2`} disabled={slot <= 0} onClick={() => setSlot(slot - 1)} aria-label="Previous artwork in preview">
-            <ChevronLeft aria-hidden className="size-4" />
-          </button>
-          <button type="button" className={`${btnSecondary} !min-h-9 !px-2`} disabled={slot >= shown.length - 1} onClick={() => setSlot(slot + 1)} aria-label="Next artwork in preview">
-            <ChevronRight aria-hidden className="size-4" />
-          </button>
-        </span>
+        <span className="text-xs text-muted">{usingSamples ? t("viewer.previewSamples") : t("viewer.previewReal")}</span>
+        <StepButtons index={slot} count={shown.length} onChange={setSlot} />
       </figcaption>
     </figure>
   );
 }
 
-/** Live museum preview: the real MuseumExperience in embedded mode. */
+/** Live museum preview: the whole 3D museum, embedded and driven by the unsaved appearance. */
 export function MuseumPreview({ museum }: { museum: ViewerMuseum }) {
+  const { t } = useI18n();
+  const layout = useMemo(() => buildLayout(toLayoutZones(galleryZones(museum))), [museum]);
+  const [requested, setStop] = useState<number | null>(null);
+  const stop = Math.min(requested ?? layout.firstArtworkStop, Math.max(layout.stops.length - 1, 0));
+
   return (
-    <div
-      className="relative h-[460px] overflow-hidden rounded-theme border border-line bg-canvas text-fg sm:h-[540px]"
-      style={museum.theme.cssVars}
-    >
-      <MuseumExperience museum={museum} embedded />
-    </div>
+    <figure className="m-0 flex flex-col gap-2">
+      <div className="relative h-[420px] overflow-hidden rounded-theme border border-line bg-canvas text-fg sm:h-[500px]" style={museum.theme.cssVars}>
+        <GalleryEmbed museum={museum} stopIndex={stop} label={t("viewer.preview")} />
+      </div>
+      <figcaption className="flex items-center justify-between gap-2">
+        <span className="text-xs text-muted">{t("viewer.previewReal")}</span>
+        <StepButtons index={stop} count={layout.stops.length} onChange={setStop} />
+      </figcaption>
+    </figure>
   );
 }
