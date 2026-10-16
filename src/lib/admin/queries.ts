@@ -11,7 +11,8 @@ export type MuseumSummary = Pick<MuseumRow, "id" | "slug" | "title" | "is_publis
   artworkCount: number;
 };
 
-export type ClientListItem = { profile: ProfileRow; museums: MuseumSummary[] };
+/** Every account owns at most one museum (created by the client on first sign-in). */
+export type ClientListItem = { profile: ProfileRow; museum: MuseumSummary | null };
 
 type Supabase = Awaited<ReturnType<typeof getAdminContext>>["supabase"];
 
@@ -25,8 +26,8 @@ async function artworkCounts(supabase: Supabase, museumIds: string[]): Promise<M
   return new Map(entries);
 }
 
-async function museumsByOwner(supabase: Supabase, ownerIds: string[]): Promise<Map<string, MuseumSummary[]>> {
-  const result = new Map<string, MuseumSummary[]>();
+async function museumByOwner(supabase: Supabase, ownerIds: string[]): Promise<Map<string, MuseumSummary>> {
+  const result = new Map<string, MuseumSummary>();
   if (ownerIds.length === 0) return result;
   const { data } = await supabase
     .from("museums")
@@ -36,8 +37,8 @@ async function museumsByOwner(supabase: Supabase, ownerIds: string[]): Promise<M
   const rows = data ?? [];
   const counts = await artworkCounts(supabase, rows.map((row) => row.id));
   for (const row of rows) {
-    const list = result.get(row.owner_id) ?? [];
-    list.push({
+    if (result.has(row.owner_id)) continue;
+    result.set(row.owner_id, {
       id: row.id,
       slug: row.slug,
       title: row.title,
@@ -45,7 +46,6 @@ async function museumsByOwner(supabase: Supabase, ownerIds: string[]): Promise<M
       created_at: row.created_at,
       artworkCount: counts.get(row.id) ?? 0,
     });
-    result.set(row.owner_id, list);
   }
   return result;
 }
@@ -63,8 +63,8 @@ export async function getOverview() {
   ]);
 
   const recentProfiles = recent.data ?? [];
-  const byOwner = await museumsByOwner(supabase, recentProfiles.map((profile) => profile.id));
-  const recentClients: ClientListItem[] = recentProfiles.map((profile) => ({ profile, museums: byOwner.get(profile.id) ?? [] }));
+  const byOwner = await museumByOwner(supabase, recentProfiles.map((profile) => profile.id));
+  const recentClients: ClientListItem[] = recentProfiles.map((profile) => ({ profile, museum: byOwner.get(profile.id) ?? null }));
 
   return {
     clients: clients.count ?? 0,
@@ -102,9 +102,9 @@ export async function listClients(params: ClientListParams) {
   const from = (params.page - 1) * PAGE_SIZE;
   const { data, count } = await query.order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1);
   const profiles = data ?? [];
-  const byOwner = await museumsByOwner(supabase, profiles.map((profile) => profile.id));
+  const byOwner = await museumByOwner(supabase, profiles.map((profile) => profile.id));
 
-  const items: ClientListItem[] = profiles.map((profile) => ({ profile, museums: byOwner.get(profile.id) ?? [] }));
+  const items: ClientListItem[] = profiles.map((profile) => ({ profile, museum: byOwner.get(profile.id) ?? null }));
   return { items, total: count ?? 0 };
 }
 
@@ -113,14 +113,13 @@ export async function getClientDetail(id: string) {
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", id).maybeSingle();
   if (!profile) return null;
 
-  const byOwner = await museumsByOwner(supabase, [id]);
-  const museums = byOwner.get(id) ?? [];
-  const hallCounts = await Promise.all(
-    museums.map(async (museum) => {
-      const { count } = await supabase.from("halls").select("id", { count: "exact", head: true }).eq("museum_id", museum.id);
-      return count ?? 0;
-    }),
-  );
+  const byOwner = await museumByOwner(supabase, [id]);
+  const ownMuseum = byOwner.get(id) ?? null;
+  let museum: (MuseumSummary & { hallCount: number }) | null = null;
+  if (ownMuseum) {
+    const { count } = await supabase.from("halls").select("id", { count: "exact", head: true }).eq("museum_id", ownMuseum.id);
+    museum = { ...ownMuseum, hallCount: count ?? 0 };
+  }
   const { count: activeSuperAdmins } = await supabase
     .from("profiles")
     .select("id", { count: "exact", head: true })
@@ -129,7 +128,7 @@ export async function getClientDetail(id: string) {
 
   return {
     profile,
-    museums: museums.map((museum, index) => ({ ...museum, hallCount: hallCounts[index] })),
+    museum,
     activeSuperAdmins: activeSuperAdmins ?? 0,
   };
 }

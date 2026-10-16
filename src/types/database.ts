@@ -1,5 +1,5 @@
-// Hand-written types matching supabase/migrations/20261016000000_initial_schema.sql
-// and supabase/migrations/20261016120000_museum_theme.sql
+// Hand-written types matching the migrations in supabase/migrations (initial schema,
+// museum theme, nullable artwork frame, one museum per user).
 
 export type UserRole = "super_admin" | "owner";
 export type FontPairing = "classic" | "modern" | "editorial" | "handwritten";
@@ -51,6 +51,7 @@ export type ProfileInsert = Pick<ProfileRow, "id" | "email"> &
   Partial<Omit<ProfileRow, "id" | "email">>;
 export type ProfileUpdate = Partial<ProfileRow>;
 
+/** A museum. Each owner has at most one (unique index on owner_id). */
 export type MuseumRow = {
   id: string;
   owner_id: string;

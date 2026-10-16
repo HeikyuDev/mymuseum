@@ -1,19 +1,12 @@
 "use server";
 
 import { z } from "zod";
-import {
-  dbErrorMessage,
-  fail,
-  getMuseumActionContext,
-  removeStoredFiles,
-  revalidateMuseum,
-  type ActionResult,
-} from "@/lib/studio/action-utils";
+import { fail, failDb, failValidation, type ActionResult } from "@/lib/action-result";
+import { getMuseumActionContext, removeStoredFiles, revalidateMuseum } from "@/lib/studio/action-utils";
 import { HALL_DEFAULTS } from "@/lib/hall-style";
 import {
   artworkCreateSchema,
   artworkFieldsSchema,
-  fieldErrorsOf,
   uuidSchema,
   type ArtworkFieldsInput,
 } from "@/lib/validation/schemas";
@@ -64,14 +57,14 @@ export async function createArtworks(
 ): Promise<ActionResult<{ ids: string[] }>> {
   const ctx = await getMuseumActionContext();
   const parsed = z.array(artworkCreateSchema).min(1).max(50).safeParse(items);
-  if (!parsed.success) return fail("Invalid artwork data.");
+  if (!parsed.success) return fail("err.invalidArtworkData");
 
   const prefix = `${ctx.museum.id}/`;
   for (const item of parsed.data) {
     if (!item.image_path.startsWith(prefix) || item.image_path.includes("..")) {
-      return fail("An uploaded file is outside your museum folder.");
+      return fail("err.outsideFolder");
     }
-    if (!(await assertHallInMuseum(ctx, item.hall_id))) return fail("That hall does not exist.");
+    if (!(await assertHallInMuseum(ctx, item.hall_id))) return fail("err.categoryMissing");
   }
 
   const nextByHall = new Map<string, number>();
@@ -101,7 +94,7 @@ export async function createArtworks(
     );
     result = await ctx.supabase.from("artworks").insert(explicit).select("id");
   }
-  if (result.error) return fail(dbErrorMessage(result.error));
+  if (result.error) return failDb(result.error);
 
   revalidateMuseum(ctx.museum.slug);
   return { ok: true, data: { ids: (result.data ?? []).map((row) => row.id) } };
@@ -109,10 +102,10 @@ export async function createArtworks(
 
 export async function updateArtwork(id: string, input: ArtworkFieldsInput): Promise<ActionResult> {
   const ctx = await getMuseumActionContext();
-  if (!uuidSchema.safeParse(id).success) return fail("Invalid artwork.");
+  if (!uuidSchema.safeParse(id).success) return fail("err.invalidArtwork");
   const parsed = artworkFieldsSchema.safeParse(input);
-  if (!parsed.success) return fail("Please fix the highlighted fields.", fieldErrorsOf(parsed.error));
-  if (!(await assertHallInMuseum(ctx, parsed.data.hall_id))) return fail("That hall does not exist.", { hall_id: "That hall does not exist." });
+  if (!parsed.success) return failValidation(parsed.error);
+  if (!(await assertHallInMuseum(ctx, parsed.data.hall_id))) return fail("err.categoryMissing", { hall_id: "err.categoryMissing" });
 
   const run = (frameStyle: FrameStyle | null) =>
     ctx.supabase
@@ -126,8 +119,8 @@ export async function updateArtwork(id: string, input: ArtworkFieldsInput): Prom
   if (result.error?.code === NOT_NULL_VIOLATION && parsed.data.frame_style === null) {
     result = await run(await hallFrameDefault(ctx, parsed.data.hall_id));
   }
-  if (result.error) return fail(dbErrorMessage(result.error));
-  if (!result.data?.length) return fail("Artwork not found.");
+  if (result.error) return failDb(result.error);
+  if (!result.data?.length) return fail("err.artworkNotFound");
 
   revalidateMuseum(ctx.museum.slug);
   return { ok: true, data: undefined };
@@ -137,7 +130,7 @@ export async function updateArtwork(id: string, input: ArtworkFieldsInput): Prom
 export async function deleteArtworks(ids: string[]): Promise<ActionResult<{ deleted: number }>> {
   const ctx = await getMuseumActionContext();
   const parsed = z.array(uuidSchema).min(1).max(200).safeParse(ids);
-  if (!parsed.success) return fail("Invalid selection.");
+  if (!parsed.success) return fail("err.invalidSelection");
 
   const { data: rows, error } = await ctx.supabase
     .from("artworks")
@@ -145,7 +138,7 @@ export async function deleteArtworks(ids: string[]): Promise<ActionResult<{ dele
     .in("id", parsed.data)
     .eq("museum_id", ctx.museum.id)
     .select("id, image_path");
-  if (error) return fail(dbErrorMessage(error));
+  if (error) return failDb(error);
 
   await removeStoredFiles(ctx.supabase, ctx.museum.id, (rows ?? []).map((row) => row.image_path));
   revalidateMuseum(ctx.museum.slug);
@@ -155,9 +148,9 @@ export async function deleteArtworks(ids: string[]): Promise<ActionResult<{ dele
 export async function moveArtworksToHall(ids: string[], hallId: string | null): Promise<ActionResult> {
   const ctx = await getMuseumActionContext();
   const parsed = z.array(uuidSchema).min(1).max(200).safeParse(ids);
-  if (!parsed.success) return fail("Invalid selection.");
-  if (hallId !== null && !uuidSchema.safeParse(hallId).success) return fail("Invalid hall.");
-  if (!(await assertHallInMuseum(ctx, hallId))) return fail("That hall does not exist.");
+  if (!parsed.success) return fail("err.invalidSelection");
+  if (hallId !== null && !uuidSchema.safeParse(hallId).success) return fail("err.invalidCategory");
+  if (!(await assertHallInMuseum(ctx, hallId))) return fail("err.categoryMissing");
 
   let sortOrder = await nextSortOrder(ctx, hallId);
   for (const id of parsed.data) {
@@ -166,7 +159,7 @@ export async function moveArtworksToHall(ids: string[], hallId: string | null): 
       .update({ hall_id: hallId, sort_order: sortOrder })
       .eq("id", id)
       .eq("museum_id", ctx.museum.id);
-    if (error) return fail(dbErrorMessage(error));
+    if (error) return failDb(error);
     sortOrder += 1;
   }
   revalidateMuseum(ctx.museum.slug);
@@ -177,7 +170,7 @@ export async function moveArtworksToHall(ids: string[], hallId: string | null): 
 export async function reorderArtworks(hallId: string | null, orderedIds: string[]): Promise<ActionResult> {
   const ctx = await getMuseumActionContext();
   const parsed = z.array(uuidSchema).min(1).max(500).safeParse(orderedIds);
-  if (!parsed.success || (hallId !== null && !uuidSchema.safeParse(hallId).success)) return fail("Invalid order.");
+  if (!parsed.success || (hallId !== null && !uuidSchema.safeParse(hallId).success)) return fail("err.invalidOrder");
 
   let query = ctx.supabase.from("artworks").select("id").eq("museum_id", ctx.museum.id);
   query = hallId ? query.eq("hall_id", hallId) : query.is("hall_id", null);
@@ -185,7 +178,7 @@ export async function reorderArtworks(hallId: string | null, orderedIds: string[
   const known = new Set((current ?? []).map((row: Pick<ArtworkRow, "id">) => row.id));
   const ids = parsed.data;
   if (ids.length !== known.size || new Set(ids).size !== ids.length || ids.some((id) => !known.has(id))) {
-    return fail("The artwork list changed. Reload the page and try again.");
+    return fail("err.artworksChanged");
   }
 
   const results = await Promise.all(
@@ -194,7 +187,7 @@ export async function reorderArtworks(hallId: string | null, orderedIds: string[
     ),
   );
   const failed = results.find((result) => result.error);
-  if (failed) return fail(dbErrorMessage(failed.error));
+  if (failed) return failDb(failed.error);
 
   revalidateMuseum(ctx.museum.slug);
   return { ok: true, data: undefined };

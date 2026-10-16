@@ -17,6 +17,12 @@ begin
     return;
   end if;
 
+  -- Each user owns exactly one museum (see 20261018000000_one_museum_per_user.sql).
+  if exists (select 1 from public.museums where owner_id = v_owner) then
+    raise notice 'The super admin already owns a museum; skipping demo seed.';
+    return;
+  end if;
+
   if exists (select 1 from public.museums where slug = 'demo-museum') then
     raise notice 'Demo museum already exists; skipping.';
     return;
