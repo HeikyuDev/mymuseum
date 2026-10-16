@@ -1,12 +1,16 @@
 // Tiny typed dictionaries. `es` is the source of truth for the key set: `en` must
-// provide exactly the same keys (enforced by the `Dictionary` type).
+// provide exactly the same keys (enforced by the `Dictionary` type). The viewer
+// strings live here; the login, platform admin and studio strings in panel-*.ts.
+
+import { panelEn } from "./panel-en";
+import { panelEs } from "./panel-es";
 
 export const LOCALES = ["es", "en"] as const;
 export type Locale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = "es";
 export const LOCALE_COOKIE = "lang";
 
-const es = {
+const viewerEs = {
   "viewer.loading": "Preparando la sala",
   "viewer.loadingProgress": "Cargando {percent}%",
   "viewer.enter": "Entrar al museo",
@@ -74,10 +78,12 @@ const es = {
   "export.lightingSoft": "Suave",
 } as const;
 
+const es = { ...viewerEs, ...panelEs } as const;
+
 export type MessageKey = keyof typeof es;
 export type Dictionary = Record<MessageKey, string>;
 
-const en: Dictionary = {
+const viewerEn: Record<keyof typeof viewerEs, string> = {
   "viewer.loading": "Preparing the gallery",
   "viewer.loadingProgress": "Loading {percent}%",
   "viewer.enter": "Enter the museum",
@@ -144,5 +150,7 @@ const en: Dictionary = {
   "export.lightingDramatic": "Dramatic",
   "export.lightingSoft": "Soft",
 };
+
+const en: Dictionary = { ...viewerEn, ...panelEn };
 
 export const DICTIONARIES: Record<Locale, Dictionary> = { es, en };

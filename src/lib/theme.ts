@@ -7,7 +7,6 @@ export const DEFAULT_FONT_PAIRING: FontPairing = "classic";
 export const DEFAULT_ACCENT = "#c9a227";
 
 type Palette = {
-  label: string;
   scheme: "dark" | "light";
   canvas: string; // page background
   raised: string; // bars and panels
@@ -20,7 +19,6 @@ type Palette = {
 // Every fg/muted pair meets WCAG AA (4.5:1) against canvas, raised and surface.
 export const THEME_PRESETS: Record<ThemePreset, Palette> = {
   dark_elegant: {
-    label: "Dark elegant",
     scheme: "dark",
     canvas: "#14110f",
     raised: "#1d1915",
@@ -30,7 +28,6 @@ export const THEME_PRESETS: Record<ThemePreset, Palette> = {
     line: "rgba(243, 236, 225, 0.16)",
   },
   light_modern: {
-    label: "White gallery",
     scheme: "light",
     canvas: "#faf8f5",
     raised: "#ffffff",
@@ -40,7 +37,6 @@ export const THEME_PRESETS: Record<ThemePreset, Palette> = {
     line: "rgba(28, 26, 23, 0.12)",
   },
   warm_classic: {
-    label: "Warm classic",
     scheme: "dark",
     canvas: "#2b1d14",
     raised: "#36251a",
@@ -50,7 +46,6 @@ export const THEME_PRESETS: Record<ThemePreset, Palette> = {
     line: "rgba(248, 234, 211, 0.18)",
   },
   midnight_blue: {
-    label: "Midnight blue",
     scheme: "dark",
     canvas: "#0b1424",
     raised: "#111d33",
@@ -60,7 +55,6 @@ export const THEME_PRESETS: Record<ThemePreset, Palette> = {
     line: "rgba(232, 238, 252, 0.16)",
   },
   minimal_mono: {
-    label: "Minimal mono",
     scheme: "light",
     canvas: "#ffffff",
     raised: "#fafafa",

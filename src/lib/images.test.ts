@@ -33,5 +33,6 @@ describe("titleFromFileName", () => {
   it("humanizes file names", () => {
     expect(titleFromFileName("sunset_over-sea.JPG")).toBe("sunset over sea");
     expect(titleFromFileName(".png")).toBe("Untitled");
+    expect(titleFromFileName(".png", "Sin título")).toBe("Sin título");
   });
 });

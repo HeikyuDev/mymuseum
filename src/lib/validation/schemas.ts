@@ -7,6 +7,7 @@ import {
   LIGHTING_PRESETS,
   WALL_STYLES,
 } from "@/lib/hall-style";
+import { LOCALES, type Locale } from "@/lib/i18n";
 import { FONT_PAIRING_STACKS, THEME_OVERRIDE_OPTIONS, THEME_PRESETS } from "@/lib/theme";
 import { slugSchema } from "@/lib/validation/slug";
 import type {
@@ -20,11 +21,11 @@ import type {
 } from "@/types/database";
 
 function enumOf<T extends string>(values: readonly T[]) {
-  return z.enum(values as unknown as [T, ...T[]], { error: "Choose one of the available options." });
+  return z.enum(values as unknown as [T, ...T[]], { error: "val.choose" });
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
-export const hexSchema = z.string().regex(HEX, "Use a color like #c9a227.");
+export const hexSchema = z.string().regex(HEX, "val.color");
 const optionalHex = hexSchema.nullish().transform((value) => value ?? null);
 
 /** Trims, enforces a max length and turns empty input into null. */
@@ -32,24 +33,25 @@ const optionalText = (max: number) =>
   z
     .string()
     .trim()
-    .max(max, `Use at most ${max} characters.`)
+    .max(max, `val.max:${max}`)
     .nullish()
     .transform((value) => (value ? value : null));
 
-const requiredText = (label: string, max: number) =>
-  z.string().trim().min(1, `${label} is required.`).max(max, `Use at most ${max} characters.`);
+const requiredText = (max: number) => z.string().trim().min(1, "val.required").max(max, `val.max:${max}`);
 
-export const uuidSchema = z.uuid({ error: "Invalid identifier." });
+export const uuidSchema = z.uuid({ error: "val.invalidId" });
 const optionalUuid = uuidSchema.nullish().transform((value) => value ?? null);
 
 export const museumCreateSchema = z.object({
-  title: requiredText("Title", 120),
+  title: requiredText(120),
   slug: slugSchema,
   tagline: optionalText(200),
+  /** Name of the starter category; a localized default is used when empty. */
+  categoryName: optionalText(80),
 });
 
 export const museumSettingsSchema = z.object({
-  title: requiredText("Title", 120),
+  title: requiredText(120),
   slug: slugSchema,
   tagline: optionalText(200),
   description: optionalText(2000),
@@ -64,7 +66,8 @@ export const appearanceSchema = z.object({
     density: enumOf(THEME_OVERRIDE_OPTIONS.density),
     motion: enumOf(THEME_OVERRIDE_OPTIONS.motion),
     allowVisitorExport: z.boolean().default(true),
-    defaultLocale: z.enum(["es", "en"]).default("es"),
+    /** Optional: when omitted the museum keeps its current default language. */
+    defaultLocale: enumOf<Locale>(LOCALES).optional(),
   }),
   default_hall_id: optionalUuid,
   cover_image_path: z.string().max(300).nullish().transform((value) => value || null),
@@ -79,7 +82,7 @@ const decorSchema = z
 
 export const hallFieldsSchema = z
   .object({
-    name: requiredText("Name", 80),
+    name: requiredText(80),
     description: optionalText(1000),
     is_visible: z.boolean(),
     wall_style: enumOf<WallStyle>(WALL_STYLES),
@@ -94,11 +97,11 @@ export const hallFieldsSchema = z
   })
   .refine((value) => value.wall_style !== "custom_color" || value.wall_color !== null, {
     path: ["wall_color"],
-    message: "Pick a wall color for the custom color style.",
+    message: "val.wallColor",
   });
 
 export const hallCreateSchema = z.object({
-  name: requiredText("Name", 80),
+  name: requiredText(80),
   description: optionalText(1000),
 });
 
@@ -108,14 +111,14 @@ const year = z
     if (value === null || value === undefined || value === "") return null;
     const n = typeof value === "number" ? value : Number(value);
     if (!Number.isInteger(n) || n < 0 || n > 3000) {
-      ctx.addIssue({ code: "custom", message: "Enter a year between 0 and 3000." });
+      ctx.addIssue({ code: "custom", message: "val.year" });
       return z.NEVER;
     }
     return n;
   });
 
 export const artworkFieldsSchema = z.object({
-  title: requiredText("Title", 160),
+  title: requiredText(160),
   description: optionalText(2000),
   author_name: optionalText(120),
   year,
@@ -132,24 +135,17 @@ export const artworkFieldsSchema = z.object({
 export const artworkCreateSchema = z.object({
   id: uuidSchema,
   image_path: z.string().min(3).max(300),
-  title: requiredText("Title", 160),
+  title: requiredText(160),
   hall_id: optionalUuid,
   width_px: z.number().int().positive().max(20000),
   height_px: z.number().int().positive().max(20000),
   aspect_ratio: z.number().positive().max(1000),
 });
 
+export const defaultLocaleSchema = z.object({ defaultLocale: enumOf<Locale>(LOCALES) });
+
 export type MuseumCreateInput = z.input<typeof museumCreateSchema>;
 export type HallFieldsInput = z.input<typeof hallFieldsSchema>;
 export type ArtworkFieldsInput = z.input<typeof artworkFieldsSchema>;
 export type AppearanceInput = z.input<typeof appearanceSchema>;
 
-/** Flattens Zod issues into `{ field: firstMessage }` for form display. */
-export function fieldErrorsOf(error: z.ZodError): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const issue of error.issues) {
-    const key = issue.path.join(".") || "_form";
-    out[key] ??= issue.message;
-  }
-  return out;
-}

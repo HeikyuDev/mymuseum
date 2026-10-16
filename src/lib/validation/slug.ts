@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // Mirrors the CHECK constraints on public.museums.slug (see the initial schema migration).
 export const RESERVED_SLUGS: readonly string[] = [
-  "admin", "super", "api", "m", "login", "logout", "signup",
+  "admin", "studio", "super", "api", "m", "login", "logout", "signup",
   "auth", "dashboard", "settings", "static", "public", "_next", "assets",
 ];
 
@@ -22,12 +22,12 @@ export function slugify(input: string, maxLength = SLUG_MAX): string {
     .replace(/-+$/g, "");
 }
 
-/** Returns a human readable problem, or null when the slug is acceptable. */
+/** Returns a validation message code (see translateCode), or null when the slug is acceptable. */
 export function validateSlug(slug: string): string | null {
-  if (slug.length < SLUG_MIN) return `Use at least ${SLUG_MIN} characters.`;
-  if (slug.length > SLUG_MAX) return `Use at most ${SLUG_MAX} characters.`;
-  if (!SLUG_PATTERN.test(slug)) return "Use lowercase letters, numbers and single hyphens only.";
-  if (RESERVED_SLUGS.includes(slug)) return "This address is reserved. Please choose another one.";
+  if (slug.length < SLUG_MIN) return `val.slugMin:${SLUG_MIN}`;
+  if (slug.length > SLUG_MAX) return `val.slugMax:${SLUG_MAX}`;
+  if (!SLUG_PATTERN.test(slug)) return "val.slugFormat";
+  if (RESERVED_SLUGS.includes(slug)) return "val.slugReserved";
   return null;
 }
 

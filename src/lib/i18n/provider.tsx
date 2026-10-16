@@ -4,7 +4,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { setLocaleAction } from "./actions";
 import { createTranslator, type Locale, type Translator } from "./index";
 
-type I18nValue = { locale: Locale; t: Translator; setLocale: (locale: Locale) => void };
+type I18nValue = {
+  locale: Locale;
+  t: Translator;
+  /** Applies the language immediately; the promise settles once the cookie is stored. */
+  setLocale: (locale: Locale) => Promise<void>;
+};
 
 const I18nContext = createContext<I18nValue | null>(null);
 
@@ -18,7 +23,7 @@ export function I18nProvider({ initialLocale, children }: { initialLocale: Local
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);
-    void setLocaleAction(next).catch(() => {
+    return setLocaleAction(next).catch(() => {
       // The choice still applies for this visit if the cookie could not be stored.
     });
   }, []);

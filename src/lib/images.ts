@@ -16,13 +16,13 @@ export function extensionFor(contentType: string): string | null {
   return EXTENSIONS[contentType] ?? null;
 }
 
-/** Returns a user facing problem for an unusable file, or null when it is acceptable. */
+/** Returns a message code (see translateCode) for an unusable file, or null when it is acceptable. */
 export function validateImageFile(file: { type: string; size: number; name?: string }): string | null {
   if (!(ACCEPTED_IMAGE_TYPES as readonly string[]).includes(file.type)) {
-    return "Only JPEG, PNG, WebP and AVIF images are supported.";
+    return "img.type";
   }
-  if (file.size > MAX_UPLOAD_BYTES) return "This image is larger than 10 MB.";
-  if (file.size === 0) return "This file is empty.";
+  if (file.size > MAX_UPLOAD_BYTES) return "img.tooLarge";
+  if (file.size === 0) return "img.empty";
   return null;
 }
 
@@ -44,7 +44,7 @@ export function aspectRatioOf(width: number, height: number): number {
 }
 
 /** Default artwork title from a file name: "my-photo_01.JPG" -> "my photo 01". */
-export function titleFromFileName(name: string): string {
+export function titleFromFileName(name: string, fallback = "Untitled"): string {
   const base = name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
-  return (base || "Untitled").slice(0, 160);
+  return (base || fallback).slice(0, 160);
 }

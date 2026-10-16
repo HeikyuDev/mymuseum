@@ -1,4 +1,4 @@
-// Temporary password helpers for the super-admin area. Pure and isomorphic: the
+// Temporary password helpers for the platform admin area. Pure and isomorphic: the
 // generator runs in the browser ("Generate" button) and on the server (reset).
 // Passwords are never logged or persisted by the app.
 
@@ -43,25 +43,24 @@ export function generateTempPassword(length = GENERATED_PASSWORD_LENGTH, fill: R
   return chars.join("");
 }
 
-export type PasswordStrength = { score: 0 | 1 | 2 | 3 | 4; label: "Too weak" | "Weak" | "Fair" | "Good" | "Strong" };
-
-const LABELS: PasswordStrength["label"][] = ["Too weak", "Weak", "Fair", "Good", "Strong"];
+/** 0 = too weak ... 4 = strong. The UI maps the score to a translated label. */
+export type PasswordStrength = { score: 0 | 1 | 2 | 3 | 4 };
 
 /** Rough strength estimate used for the form hint (length + character variety). */
 export function passwordStrength(password: string): PasswordStrength {
-  if (password.length < PASSWORD_MIN_LENGTH) return { score: password.length >= 8 ? 1 : 0, label: password.length >= 8 ? "Weak" : "Too weak" };
+  if (password.length < PASSWORD_MIN_LENGTH) return { score: password.length >= 8 ? 1 : 0 };
   const classes = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((pattern) => pattern.test(password)).length;
   let score = classes - 1 + (password.length >= 16 ? 1 : 0);
   score = Math.max(1, Math.min(4, score));
-  return { score: score as PasswordStrength["score"], label: LABELS[score] };
+  return { score: score as PasswordStrength["score"] };
 }
 
-/** Returns a human readable problem, or null when the password is acceptable. */
+/** Returns a validation message code (see translateCode), or null when the password is acceptable. */
 export function validatePassword(password: string): string | null {
-  if (password.length < PASSWORD_MIN_LENGTH) return `Use at least ${PASSWORD_MIN_LENGTH} characters.`;
-  if (password.length > PASSWORD_MAX_LENGTH) return `Use at most ${PASSWORD_MAX_LENGTH} characters.`;
+  if (password.length < PASSWORD_MIN_LENGTH) return `val.passwordMin:${PASSWORD_MIN_LENGTH}`;
+  if (password.length > PASSWORD_MAX_LENGTH) return `val.passwordMax:${PASSWORD_MAX_LENGTH}`;
   if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
-    return "Include lowercase and uppercase letters and a number.";
+    return "val.passwordMix";
   }
   return null;
 }

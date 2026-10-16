@@ -7,6 +7,12 @@ describe("validateSlug", () => {
     expect(validateSlug("a1b")).toBeNull();
   });
 
+  it("returns message codes with their limits", () => {
+    expect(validateSlug("ab")).toBe("val.slugMin:3");
+    expect(validateSlug("a".repeat(41))).toBe("val.slugMax:40");
+    expect(validateSlug("Upper")).toBe("val.slugFormat");
+  });
+
   it("rejects malformed slugs", () => {
     expect(validateSlug("ab")).not.toBeNull();
     expect(validateSlug("a".repeat(41))).not.toBeNull();
@@ -18,8 +24,8 @@ describe("validateSlug", () => {
   });
 
   it("rejects reserved slugs", () => {
-    for (const slug of ["admin", "login", "logout", "api", "assets"]) {
-      expect(validateSlug(slug)).toMatch(/reserved/);
+    for (const slug of ["admin", "studio", "login", "logout", "api", "assets"]) {
+      expect(validateSlug(slug)).toBe("val.slugReserved");
     }
   });
 });

@@ -7,7 +7,7 @@ import { ARTWORKS_BUCKET } from "@/lib/supabase/storage";
  * Uploads a blob to the `artworks` bucket straight from the browser with the
  * signed-in user's token (Storage RLS limits writes to `{museum_id}/...`).
  * Uses XHR for real upload progress and falls back to the SDK when no session
- * token is available. Rejects with a user facing Error.
+ * token is available. Rejects with an Error whose message is a code (see translateCode).
  */
 export async function uploadToArtworks(
   path: string,
@@ -18,7 +18,7 @@ export async function uploadToArtworks(
   const supabase = createClient();
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  if (!token) throw new Error("Your session has expired. Please sign in again.");
+  if (!token) throw new Error("img.session");
 
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const encodedPath = path.split("/").map(encodeURIComponent).join("/");
@@ -34,12 +34,12 @@ export async function uploadToArtworks(
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(event.loaded / event.total);
     };
-    xhr.onerror = () => reject(new Error("Network error while uploading."));
+    xhr.onerror = () => reject(new Error("img.network"));
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else if (xhr.status === 401 || xhr.status === 403) reject(new Error("You are not allowed to upload this file."));
-      else if (xhr.status === 413) reject(new Error("This image is too large."));
-      else reject(new Error("The upload failed. Please try again."));
+      else if (xhr.status === 401 || xhr.status === 403) reject(new Error("img.forbidden"));
+      else if (xhr.status === 413) reject(new Error("img.uploadTooLarge"));
+      else reject(new Error("img.uploadFailed"));
     };
     xhr.send(blob);
   });

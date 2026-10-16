@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { accountGuardError, isDeleteConfirmed } from "./guards";
 import { buildQuery, pageCount, parseClientParams, parseMuseumParams, sanitizeSearch } from "./params";
 import { generateTempPassword, passwordStrength, validatePassword } from "./password";
-import { changeEmailSchema, createClientSchema, resolveInitialMuseum } from "./validation";
+import { changeEmailSchema, createClientSchema } from "./validation";
 
 describe("generateTempPassword", () => {
   it("has the requested length and every character class", () => {
@@ -44,10 +44,10 @@ describe("generateTempPassword", () => {
 
 describe("password validation and strength", () => {
   it("rejects short or low-variety passwords", () => {
-    expect(validatePassword("Short1")).toMatch(/at least 12/);
-    expect(validatePassword("alllowercase123")).toMatch(/uppercase/);
-    expect(validatePassword("ABCDEFGHIJKL1234")).toMatch(/lowercase/);
-    expect(validatePassword("x".repeat(73))).toMatch(/at most 72/);
+    expect(validatePassword("Short1")).toBe("val.passwordMin:12");
+    expect(validatePassword("alllowercase123")).toBe("val.passwordMix");
+    expect(validatePassword("ABCDEFGHIJKL1234")).toBe("val.passwordMix");
+    expect(validatePassword("x".repeat(73))).toBe("val.passwordMax:72");
   });
 
   it("accepts a reasonable password", () => {
@@ -55,39 +55,34 @@ describe("password validation and strength", () => {
   });
 
   it("scores strength by length and variety", () => {
-    expect(passwordStrength("abc").label).toBe("Too weak");
-    expect(passwordStrength("abcdefgh").label).toBe("Weak");
-    expect(passwordStrength(generateTempPassword()).label).toBe("Strong");
+    expect(passwordStrength("abc").score).toBe(0);
+    expect(passwordStrength("abcdefgh").score).toBe(1);
+    expect(passwordStrength(generateTempPassword()).score).toBe(4);
   });
 });
 
 describe("createClientSchema", () => {
   const base = { email: "  Client@Example.COM ", displayName: " Ana ", password: "Correct7Horse" };
 
-  it("normalizes the email and accepts a client without a museum", () => {
+  it("normalizes the email and trims the name", () => {
     const parsed = createClientSchema.safeParse(base);
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.email).toBe("client@example.com");
       expect(parsed.data.displayName).toBe("Ana");
-      expect(resolveInitialMuseum(parsed.data)).toBeNull();
+      // Clients create their own museum on first sign-in: nothing about it is collected here.
+      expect(Object.keys(parsed.data).sort()).toEqual(["displayName", "email", "password"]);
     }
   });
 
-  it("derives the slug from the title when none is given", () => {
-    const parsed = createClientSchema.parse({ ...base, museumTitle: "Galería de Ana" });
-    expect(resolveInitialMuseum(parsed)).toEqual({ title: "Galería de Ana", slug: "galeria-de-ana" });
-  });
-
-  it("rejects reserved and malformed slugs", () => {
-    const reserved = createClientSchema.safeParse({ ...base, museumTitle: "Admin", museumSlug: "admin" });
-    expect(reserved.success).toBe(false);
-    const malformed = createClientSchema.safeParse({ ...base, museumTitle: "Ok", museumSlug: "Bad Slug" });
-    expect(malformed.success).toBe(false);
-  });
-
-  it("rejects an address without a title", () => {
-    expect(createClientSchema.safeParse({ ...base, museumSlug: "my-museum" }).success).toBe(false);
+  it("reports validation problems as message codes", () => {
+    const messages = (input: unknown) => {
+      const parsed = createClientSchema.safeParse(input);
+      return parsed.success ? [] : parsed.error.issues.map((issue) => issue.message);
+    };
+    expect(messages({ ...base, email: "nope" })).toContain("val.email");
+    expect(messages({ ...base, displayName: "  " })).toContain("val.required");
+    expect(messages({ ...base, password: "weak" })).toContain("val.passwordMin:12");
   });
 
   it("rejects invalid email and weak password", () => {
@@ -102,14 +97,14 @@ describe("accountGuardError", () => {
   const client = { id: "c", role: "owner" as const, is_active: true };
 
   it("blocks acting on yourself", () => {
-    expect(accountGuardError({ action: "disable", actorId: "a", target: admin, activeSuperAdmins: 3 })).toMatch(/own account/);
-    expect(accountGuardError({ action: "delete", actorId: "a", target: admin, activeSuperAdmins: 3 })).toMatch(/own account/);
+    expect(accountGuardError({ action: "disable", actorId: "a", target: admin, activeSuperAdmins: 3 })).toBe("guard.selfDisable");
+    expect(accountGuardError({ action: "delete", actorId: "a", target: admin, activeSuperAdmins: 3 })).toBe("guard.selfDelete");
   });
 
   it("blocks removing the last active super admin", () => {
     const other = { ...admin, id: "b" };
-    expect(accountGuardError({ action: "delete", actorId: "a", target: other, activeSuperAdmins: 1 })).toMatch(/last active super admin/);
-    expect(accountGuardError({ action: "disable", actorId: "a", target: other, activeSuperAdmins: 1 })).toMatch(/last active super admin/);
+    expect(accountGuardError({ action: "delete", actorId: "a", target: other, activeSuperAdmins: 1 })).toBe("guard.lastDelete");
+    expect(accountGuardError({ action: "disable", actorId: "a", target: other, activeSuperAdmins: 1 })).toBe("guard.lastDisable");
   });
 
   it("allows removing a super admin when another remains", () => {

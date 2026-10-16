@@ -24,7 +24,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob | n
  * Validates and prepares a file for upload (browser only). Images whose long
  * side exceeds 2400px are redrawn on a canvas and re-encoded as WebP (JPEG when
  * the browser cannot encode WebP) at quality 0.85. Images that already fit are
- * uploaded untouched. Throws an Error with a user facing message.
+ * uploaded untouched. Throws an Error whose message is a code (see translateCode).
  */
 export async function prepareImage(file: File): Promise<PreparedImage> {
   const problem = validateImageFile(file);
@@ -34,7 +34,7 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
   try {
     bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
   } catch {
-    throw new Error("This image could not be read. It may be corrupted.");
+    throw new Error("img.unreadable");
   }
 
   try {
@@ -54,7 +54,7 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
     canvas.width = target.width;
     canvas.height = target.height;
     const context = canvas.getContext("2d");
-    if (!context) throw new Error("Your browser cannot process images.");
+    if (!context) throw new Error("img.browser");
     context.imageSmoothingQuality = "high";
     context.drawImage(bitmap, 0, 0, target.width, target.height);
 
@@ -66,8 +66,8 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
       context.fillRect(0, 0, target.width, target.height);
       blob = await canvasToBlob(canvas, "image/jpeg");
     }
-    if (!blob) throw new Error("This image could not be processed.");
-    if (blob.size > MAX_UPLOAD_BYTES) throw new Error("This image is still larger than 10 MB after resizing.");
+    if (!blob) throw new Error("img.processing");
+    if (blob.size > MAX_UPLOAD_BYTES) throw new Error("img.stillTooLarge");
 
     return {
       blob,
