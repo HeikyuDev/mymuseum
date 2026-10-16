@@ -3,7 +3,7 @@
 
 import { motion } from "motion/react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import type { ViewerArtwork } from "@/lib/museum-data";
 import { btnGhost, btnIcon } from "./ui";
 
@@ -12,6 +12,8 @@ type Props = {
   position: number;
   total: number;
   reduced: boolean;
+  /** Optional action shown under the description (e.g. download image). */
+  exportAction?: ReactNode;
   onPrev: () => void;
   onNext: () => void;
   onClose: () => void;
@@ -19,7 +21,7 @@ type Props = {
 
 const FOCUSABLE = 'button, [href], [tabindex]:not([tabindex="-1"])';
 
-export function ArtworkDetail({ artwork, position, total, reduced, onPrev, onNext, onClose }: Props) {
+export function ArtworkDetail({ artwork, position, total, reduced, exportAction, onPrev, onNext, onClose }: Props) {
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -93,6 +95,7 @@ export function ArtworkDetail({ artwork, position, total, reduced, onPrev, onNex
           ) : (
             <p className="mt-4 text-base text-muted">No description yet.</p>
           )}
+          {exportAction ? <div className="mt-5">{exportAction}</div> : null}
         </div>
 
         <div className="flex gap-3 border-t border-line p-4">

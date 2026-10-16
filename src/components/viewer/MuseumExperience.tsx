@@ -257,6 +257,7 @@ export function MuseumExperience({ museum, embedded = false, initialHallId }: Pr
                     position={slot + 1}
                     total={n}
                     reduced={reduced}
+                    exportAction={<ExportStoryButton museum={museum} hall={hall} artwork={active} />}
                     onPrev={() => setSlot((s) => Math.max(s - 1, 0))}
                     onNext={() => setSlot((s) => Math.min(s + 1, n - 1))}
                     onClose={() => setDetailOpen(false)}
@@ -303,7 +304,6 @@ export function MuseumExperience({ museum, embedded = false, initialHallId }: Pr
                         Details
                       </button>
                     ) : null}
-                    <ExportStoryButton museumSlug={museum.slug} hallId={hall.id} artworkId={active?.id} />
                     <button
                       type="button"
                       onClick={goNext}
