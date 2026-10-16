@@ -171,7 +171,13 @@ function pick<K extends string>(table: Record<K, unknown>, raw: unknown, fallbac
   return typeof raw === "string" && raw in table ? (raw as K) : fallback;
 }
 
-function resolveOverrides(raw: unknown): ThemeOverrides {
+export const THEME_OVERRIDE_OPTIONS = {
+  radius: Object.keys(RADIUS) as (keyof typeof RADIUS)[],
+  density: Object.keys(DENSITY) as (keyof typeof DENSITY)[],
+  motion: Object.keys(MOTION) as (keyof typeof MOTION)[],
+};
+
+export function resolveOverrides(raw: unknown): ThemeOverrides {
   const bag = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   return {
     radius: pick(RADIUS, bag.radius, DEFAULT_OVERRIDES.radius),

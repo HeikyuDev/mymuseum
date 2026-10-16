@@ -37,10 +37,22 @@ const TRANSITION_LOCK_MS = 950;
 
 type View = "landing" | "hall";
 
-export function MuseumExperience({ museum }: { museum: ViewerMuseum }) {
+type Props = {
+  museum: ViewerMuseum;
+  /**
+   * Contained mode used by the admin live preview: fills its parent instead of
+   * the viewport and does not listen to global keyboard events.
+   */
+  embedded?: boolean;
+  /** Embedded only: open this hall first instead of the entrance. */
+  initialHallId?: string;
+};
+
+export function MuseumExperience({ museum, embedded = false, initialHallId }: Props) {
   const reduced = useReducedMotion() ?? false;
-  const [view, setView] = useState<View>("landing");
-  const [hallIndex, setHallIndex] = useState(0);
+  const initialIndex = initialHallId ? museum.halls.findIndex((item) => item.id === initialHallId) : -1;
+  const [view, setView] = useState<View>(initialIndex >= 0 ? "hall" : "landing");
+  const [hallIndex, setHallIndex] = useState(Math.max(initialIndex, 0));
   const [slot, setSlot] = useState(0);
   const [detailOpen, setDetailOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -48,7 +60,7 @@ export function MuseumExperience({ museum }: { museum: ViewerMuseum }) {
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const halls = museum.halls;
-  const hall = halls[hallIndex];
+  const hall = halls[hallIndex] ?? halls[0];
   const prevHall = halls[hallIndex - 1] ?? null;
   const nextHall = halls[hallIndex + 1] ?? null;
   const n = hall?.artworks.length ?? 0;
@@ -93,7 +105,7 @@ export function MuseumExperience({ museum }: { museum: ViewerMuseum }) {
 
   // Keyboard: arrows move along the wall, Escape closes overlays.
   useEffect(() => {
-    if (view !== "hall") return;
+    if (view !== "hall" || embedded) return;
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
@@ -110,7 +122,7 @@ export function MuseumExperience({ museum }: { museum: ViewerMuseum }) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [view, goNext, goPrev, detailOpen, switcherOpen]);
+  }, [view, embedded, goNext, goPrev, detailOpen, switcherOpen]);
 
   const variants = reduced ? fadeVariants : hallVariants;
   const active = slot >= 0 && slot < n ? hall.artworks[slot] : null;
@@ -118,9 +130,9 @@ export function MuseumExperience({ museum }: { museum: ViewerMuseum }) {
   const atNextDoor = slot === n && n > 0 && !!nextHall;
 
   return (
-    <div className="relative h-dvh w-full overflow-hidden bg-canvas text-fg">
+    <div className={`relative w-full overflow-hidden bg-canvas text-fg ${embedded ? "h-full" : "h-dvh"}`}>
       <AnimatePresence initial={false}>
-        {view === "landing" ? (
+        {view === "landing" || !hall ? (
           <motion.div
             key="landing"
             className="absolute inset-0"

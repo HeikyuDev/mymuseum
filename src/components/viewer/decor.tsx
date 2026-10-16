@@ -67,8 +67,21 @@ function RopeBarrier({ k }: { k: number }) {
     <div style={{ width, height: 82 * k, position: "relative" }} aria-hidden>
       {post("left")}
       {post("right")}
-      <svg width={width} height={82 * k} viewBox="0 0 210 82" style={{ position: "absolute", inset: 0 }}>
-        <path d="M6 12 Q105 62 204 12" fill="none" stroke="#7b1f2c" strokeWidth="5" strokeLinecap="round" />
+      <svg width={width} height={82 * k} viewBox="0 0 210 82" style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+        {/* Soft shadow under the sagging rope, then a thick rope with a highlight. */}
+        <path d="M6 18 Q105 70 204 18" fill="none" stroke="rgba(0,0,0,.28)" strokeWidth="9" strokeLinecap="round" />
+        <path d="M6 12 Q105 62 204 12" fill="none" stroke="#a3122b" strokeWidth="9" strokeLinecap="round" />
+        <path
+          d="M6 12 Q105 62 204 12"
+          fill="none"
+          stroke="#ff8a96"
+          strokeWidth="2"
+          strokeDasharray="1 5"
+          strokeLinecap="round"
+          opacity=".85"
+        />
+        <circle cx="6" cy="12" r="6" fill="#e5c76b" />
+        <circle cx="204" cy="12" r="6" fill="#e5c76b" />
       </svg>
     </div>
   );

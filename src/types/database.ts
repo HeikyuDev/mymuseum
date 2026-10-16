@@ -110,7 +110,8 @@ export type ArtworkRow = {
   width_px: number | null;
   height_px: number | null;
   aspect_ratio: number | null;
-  frame_style: FrameStyle;
+  /** Null (after migration 20261017000000) means "use the hall's default frame style". */
+  frame_style: FrameStyle | null;
   frame_color: string | null;
   mat: boolean;
   mat_color: string | null;
