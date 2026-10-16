@@ -68,6 +68,11 @@ export function Landing({ museum, onEnterHall }: Props) {
                         />
                       </div>
                       <div className="flex flex-1 flex-col gap-1 p-5">
+                        {hall.id === museum.defaultHallId ? (
+                          <span className="w-fit rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold text-on-accent">
+                            Start here
+                          </span>
+                        ) : null}
                         <h3 className="font-display text-2xl font-semibold">{hall.name}</h3>
                         {hall.description ? (
                           <p className="line-clamp-2 text-sm text-muted">{hall.description}</p>

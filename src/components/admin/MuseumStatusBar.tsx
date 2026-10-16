@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Copy, ExternalLink } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
 import { toast } from "sonner";
 import { setMuseumPublished } from "@/app/admin/actions/museum";
 import { btnPrimary, btnSecondary, Spinner } from "./ui";
@@ -20,13 +20,21 @@ export function StatusBadge({ published }: { published: boolean }) {
 }
 
 export function MuseumStatusBar({ slug, published }: { slug: string; published: boolean }) {
-  const [origin, setOrigin] = useState("");
+  const origin = useSyncExternalStore(
+    () => () => {},
+    () => window.location.origin,
+    () => "",
+  );
   const [copied, setCopied] = useState(false);
   const [state, setState] = useState(published);
+  const [syncedFrom, setSyncedFrom] = useState(published);
   const [pending, startTransition] = useTransition();
 
-  useEffect(() => setOrigin(window.location.origin), []);
-  useEffect(() => setState(published), [published]);
+  // Adopt the server value after a refresh.
+  if (published !== syncedFrom) {
+    setSyncedFrom(published);
+    setState(published);
+  }
 
   const path = `/m/${slug}`;
   const url = `${origin}${path}`;

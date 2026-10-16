@@ -21,7 +21,7 @@ import type {
 } from "@/types/database";
 import { sampleArtworkImage } from "./sample-art";
 
-type Option<T extends string> = { value: T; label: string; preview: ReactNode };
+export type Option<T extends string> = { value: T; label: string; preview: ReactNode };
 
 type GroupProps<T extends string> = {
   legend: string;

@@ -37,6 +37,8 @@ export type ViewerMuseum = {
   tagline: string | null;
   description: string | null;
   coverUrl: string | null;
+  /** Hall marked "Start here" on the entrance (null = none). */
+  defaultHallId: string | null;
   theme: ResolvedMuseumTheme;
   halls: ViewerHall[];
 };
@@ -64,7 +66,7 @@ function aspectOf(row: Pick<ArtworkRow, "aspect_ratio" | "width_px" | "height_px
 }
 
 type MuseumInput = Pick<MuseumRow, "id" | "slug" | "title" | "tagline" | "description" | "cover_image_path"> &
-  Partial<Pick<MuseumRow, "theme_preset" | "accent_color" | "font_pairing" | "theme_overrides">>;
+  Partial<Pick<MuseumRow, "theme_preset" | "accent_color" | "font_pairing" | "theme_overrides" | "default_hall_id">>;
 
 const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order;
 
@@ -126,6 +128,7 @@ export function buildViewerMuseum(input: {
     tagline: museum.tagline,
     description: museum.description,
     coverUrl: coverPath ? getArtworkPublicUrl(coverPath) : (halls.find((h) => h.coverUrl)?.coverUrl ?? null),
+    defaultHallId: halls.some((h) => h.id === museum.default_hall_id) ? (museum.default_hall_id ?? null) : null,
     theme: resolveMuseumTheme(museum),
     halls,
   };
