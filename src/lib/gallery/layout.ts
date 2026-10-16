@@ -5,8 +5,8 @@ import { artworkSize, type ArtworkSize } from "./frame-specs";
 // runs along the X axis (the wall plane is z = 0, the visitor stands at z > 0).
 // Halls are consecutive zones separated by portals. No randomness, no DOM.
 
-export const EYE_CENTER = 1.55; // height of the artwork centers (m)
-export const WALL_HEIGHT = 4.2;
+export const EYE_CENTER = 1.62; // height of the artwork centers (m)
+export const WALL_HEIGHT = 3.9;
 export const ROOM_DEPTH = 8;
 export const PORTAL_WIDTH = 3.6;
 export const PORTAL_HEIGHT = 2.85;

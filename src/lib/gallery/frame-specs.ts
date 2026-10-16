@@ -43,15 +43,20 @@ export type ArtworkSize = {
 
 export const DEFAULT_ASPECT = 4 / 3;
 
-const TARGET_AREA = 1.35; // m^2 of photo, gives a pleasant, consistent rhythm
-const MAX_W = 2.5;
-const MAX_H = 1.55;
+const TARGET_AREA = 1.7; // m^2 of photo, gives a pleasant, consistent rhythm
+/** A photo never has a shorter side than this (unless the width limit forces it), so small or square photos do not float on the wall. */
+const MIN_SIDE = 0.95;
+const MAX_W = 2.6;
+const MAX_H = 1.6;
 
 /** Real aspect ratio -> photo size in meters with a consistent visual weight. */
 export function photoSize(aspect: number | null): { w: number; h: number } {
   const ratio = aspect !== null && Number.isFinite(aspect) && aspect > 0 ? Math.min(Math.max(aspect, 0.25), 6) : DEFAULT_ASPECT;
   let h = Math.sqrt(TARGET_AREA / ratio);
   let w = h * ratio;
+  const grow = Math.max(1, MIN_SIDE / Math.min(w, h));
+  h *= grow;
+  w *= grow;
   const scale = Math.min(1, MAX_W / w, MAX_H / h);
   h *= scale;
   w *= scale;

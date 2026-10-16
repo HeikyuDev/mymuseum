@@ -33,19 +33,25 @@ describe("photoSize", () => {
       const s = photoSize(a);
       return s.w * s.h;
     });
-    for (const area of areas) expect(area).toBeCloseTo(1.35, 1);
+    for (const area of areas) expect(area).toBeGreaterThanOrEqual(1.65);
+    for (const area of areas) expect(area).toBeLessThanOrEqual(1.9);
+  });
+
+  it("scales small and square photos up so they do not float on a large wall", () => {
+    expect(photoSize(1).h).toBeGreaterThanOrEqual(1.25);
+    for (const a of [0.7, 1, 1.4, 2, 2.6]) expect(Math.min(photoSize(a).w, photoSize(a).h)).toBeGreaterThanOrEqual(0.94);
   });
 
   it("clamps panoramas and falls back for missing aspects", () => {
     const pano = photoSize(5);
-    expect(pano.w).toBeLessThanOrEqual(2.5 + 1e-9);
+    expect(pano.w).toBeLessThanOrEqual(2.6 + 1e-9);
     expect(pano.w / pano.h).toBeCloseTo(5, 5);
     expect(photoSize(null).w / photoSize(null).h).toBeCloseTo(4 / 3, 5);
     expect(photoSize(Number.NaN).w).toBeGreaterThan(0);
   });
 
   it("never exceeds the maximum height for tall portraits", () => {
-    expect(photoSize(0.3).h).toBeLessThanOrEqual(1.55 + 1e-9);
+    expect(photoSize(0.3).h).toBeLessThanOrEqual(1.6 + 1e-9);
   });
 });
 
