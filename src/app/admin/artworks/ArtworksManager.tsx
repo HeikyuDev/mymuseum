@@ -7,18 +7,23 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { deleteArtworks, moveArtworksToHall, reorderArtworks } from "@/app/admin/actions/artworks";
+import { StoryExportButton } from "@/components/story/StoryExportButton";
+import { ADMIN_THEME } from "@/lib/admin/theme";
+import type { StoryArtworkInfo, StoryHallInfo, StoryMuseumInfo } from "@/lib/story/plan";
 import { btnDanger, btnIconSm, btnSecondary, cardClass, EmptyState, Spinner } from "@/components/admin/ui";
 import { UploadPanel } from "./UploadPanel";
 
 type ArtworkItem = { id: string; title: string; hallId: string | null; imageUrl: string | null; isActive: boolean };
 type HallItem = { id: string; name: string };
 
-type Props = { museumId: string; halls: HallItem[]; artworks: ArtworkItem[] };
+type StoryData = { museum: StoryMuseumInfo; halls: StoryHallInfo[]; artworks: Record<string, StoryArtworkInfo> };
+
+type Props = { museumId: string; halls: HallItem[]; artworks: ArtworkItem[]; story: StoryData };
 
 const ALL = "all";
 const NONE = "none";
 
-export function ArtworksManager({ museumId, halls, artworks: initial }: Props) {
+export function ArtworksManager({ museumId, halls, artworks: initial, story }: Props) {
   const router = useRouter();
   const [artworks, setArtworks] = useState(initial);
   const [syncedFrom, setSyncedFrom] = useState(initial);
@@ -211,6 +216,18 @@ export function ArtworksManager({ museumId, halls, artworks: initial }: Props) {
                     <Pencil aria-hidden className="size-3.5" />
                     Edit
                   </Link>
+                  {story.artworks[artwork.id] ? (
+                    <StoryExportButton
+                      mode="admin"
+                      museum={story.museum}
+                      artwork={story.artworks[artwork.id]}
+                      halls={story.halls}
+                      hallId={artwork.hallId}
+                      themeVars={ADMIN_THEME.cssVars}
+                      ariaLabel={`Export ${artwork.title} as an image`}
+                      className={`${btnIconSm} [&>svg]:size-4`}
+                    />
+                  ) : null}
                   {reorderable ? (
                     <>
                       <button type="button" className={btnIconSm} disabled={index === 0} onClick={() => move(artwork.id, -1)} aria-label={`Move ${artwork.title} earlier`}>

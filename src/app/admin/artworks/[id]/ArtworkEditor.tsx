@@ -8,7 +8,11 @@ import { toast } from "sonner";
 import { deleteArtworks, updateArtwork } from "@/app/admin/actions/artworks";
 import { ColorField, OptionGroup, Toggle, frameOptions, type Option } from "@/components/admin/pickers";
 import { SaveBar } from "@/components/admin/SaveBar";
-import { btnDanger, cardClass, Field, inputClass, Spinner, textareaClass } from "@/components/admin/ui";
+import { ADMIN_THEME } from "@/lib/admin/theme";
+import { storyHallsFromRows } from "@/lib/story/adapters";
+import type { StoryMuseumInfo } from "@/lib/story/plan";
+import { btnDanger, btnSecondary, cardClass, Field, inputClass, Spinner, textareaClass } from "@/components/admin/ui";
+import { StoryExportButton } from "@/components/story/StoryExportButton";
 import { ArtworkFrame, computeFrame } from "@/components/viewer/ArtworkFrame";
 import { wallLayer } from "@/components/viewer/scenery";
 import { useUnsavedGuard } from "@/hooks/useUnsavedGuard";
@@ -48,7 +52,7 @@ function draftFrom(artwork: ArtworkRow): Draft {
   };
 }
 
-export function ArtworkEditor({ artwork, imageUrl, halls }: { artwork: ArtworkRow; imageUrl: string | null; halls: HallRow[] }) {
+export function ArtworkEditor({ artwork, imageUrl, halls, storyMuseum }: { artwork: ArtworkRow; imageUrl: string | null; halls: HallRow[]; storyMuseum: StoryMuseumInfo }) {
   const router = useRouter();
   const [saved, setSaved] = useState(() => draftFrom(artwork));
   const [draft, setDraft] = useState(saved);
@@ -120,7 +124,31 @@ export function ArtworkEditor({ artwork, imageUrl, halls }: { artwork: ArtworkRo
           <ArrowLeft aria-hidden className="size-4" />
           All artworks
         </Link>
-        <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{saved.title}</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{saved.title}</h1>
+          {imageUrl ? (
+            <StoryExportButton
+              mode="admin"
+              museum={storyMuseum}
+              artwork={{
+                title: draft.title || saved.title,
+                year: draft.year === "" ? null : Number(draft.year),
+                imageUrl,
+                aspect: ratio,
+                frameStyle: effectiveFrame,
+                frameColor: draft.frame_color,
+                mat: draft.mat,
+                matColor: draft.mat_color,
+              }}
+              halls={storyHallsFromRows(halls)}
+              hallId={draft.hall_id || null}
+              themeVars={ADMIN_THEME.cssVars}
+              className={btnSecondary}
+            >
+              Export as image
+            </StoryExportButton>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
