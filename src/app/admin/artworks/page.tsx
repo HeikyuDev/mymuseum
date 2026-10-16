@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/admin/ui";
 import { getAdminArtworks, getAdminHalls } from "@/lib/admin/queries";
 import { requireMuseum } from "@/lib/auth/session";
-import { storyArtworkFromRow, storyHallsFromRows, storyMuseumFromRow } from "@/lib/story/adapters";
-import { artworkImageUrl } from "@/lib/viewer-model";
+import { artworkImageUrl, buildViewerMuseum } from "@/lib/viewer-model";
 import { ArtworksManager } from "./ArtworksManager";
 
 export const metadata: Metadata = { title: "Artworks" };
@@ -18,16 +17,7 @@ export default async function ArtworksPage() {
       <ArtworksManager
         museumId={museum.id}
         halls={halls.map((hall) => ({ id: hall.id, name: hall.name }))}
-        story={{
-          museum: storyMuseumFromRow(museum),
-          halls: storyHallsFromRows(halls),
-          artworks: Object.fromEntries(
-            artworks.flatMap((artwork) => {
-              const imageUrl = artworkImageUrl(artwork);
-              return imageUrl ? [[artwork.id, storyArtworkFromRow(artwork, imageUrl, halls)]] : [];
-            }),
-          ),
-        }}
+        viewerMuseum={buildViewerMuseum({ museum, halls, artworks })}
         artworks={artworks.map((artwork) => ({
           id: artwork.id,
           title: artwork.title,

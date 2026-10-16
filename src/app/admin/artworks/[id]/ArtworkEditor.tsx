@@ -8,16 +8,13 @@ import { toast } from "sonner";
 import { deleteArtworks, updateArtwork } from "@/app/admin/actions/artworks";
 import { ColorField, OptionGroup, Toggle, frameOptions, type Option } from "@/components/admin/pickers";
 import { SaveBar } from "@/components/admin/SaveBar";
-import { ADMIN_THEME } from "@/lib/admin/theme";
-import { storyHallsFromRows } from "@/lib/story/adapters";
-import type { StoryMuseumInfo } from "@/lib/story/plan";
 import { btnDanger, btnSecondary, cardClass, Field, inputClass, Spinner, textareaClass } from "@/components/admin/ui";
-import { StoryExportButton } from "@/components/story/StoryExportButton";
+import { PhotoExportButton } from "@/components/gallery/export/PhotoExportButton";
 import { ArtworkFrame, computeFrame } from "@/components/viewer/ArtworkFrame";
 import { wallLayer } from "@/components/viewer/scenery";
 import { useUnsavedGuard } from "@/hooks/useUnsavedGuard";
 import { FRAME_STYLES, resolveHallStyle } from "@/lib/hall-style";
-import { resolveFrameStyle } from "@/lib/viewer-model";
+import { resolveFrameStyle, type ViewerArtwork, type ViewerMuseum } from "@/lib/viewer-model";
 import type { ArtworkRow, FrameStyle, HallRow } from "@/types/database";
 
 type FrameChoice = FrameStyle | "inherit";
@@ -52,7 +49,7 @@ function draftFrom(artwork: ArtworkRow): Draft {
   };
 }
 
-export function ArtworkEditor({ artwork, imageUrl, halls, storyMuseum }: { artwork: ArtworkRow; imageUrl: string | null; halls: HallRow[]; storyMuseum: StoryMuseumInfo }) {
+export function ArtworkEditor({ artwork, imageUrl, halls, viewerMuseum }: { artwork: ArtworkRow; imageUrl: string | null; halls: HallRow[]; viewerMuseum: ViewerMuseum }) {
   const router = useRouter();
   const [saved, setSaved] = useState(() => draftFrom(artwork));
   const [draft, setDraft] = useState(saved);
@@ -70,6 +67,19 @@ export function ArtworkEditor({ artwork, imageUrl, halls, storyMuseum }: { artwo
   const effectiveFrame = resolveFrameStyle(draft.frame === "inherit" ? null : draft.frame, hallStyle.defaultFrameStyle);
   const ratio = (artwork.aspect_ratio ? Number(artwork.aspect_ratio) : null) ?? loadedRatio ?? 4 / 3;
   const metrics = computeFrame(ratio, 300, 240, effectiveFrame, draft.mat);
+
+  // The export reflects the unsaved edits: same museum, this one artwork with the draft values.
+  const exportMuseum = (() => {
+    const apply = (item: ViewerArtwork): ViewerArtwork =>
+      item.id === artwork.id
+        ? { ...item, title: draft.title || item.title, frameStyle: effectiveFrame, frameColor: draft.frame_color, mat: draft.mat, matColor: draft.mat_color }
+        : item;
+    return {
+      ...viewerMuseum,
+      halls: viewerMuseum.halls.map((item) => ({ ...item, artworks: item.artworks.map(apply) })),
+      otherArtworks: viewerMuseum.otherArtworks.map(apply),
+    };
+  })();
 
   const options: Option<FrameChoice>[] = [
     { ...frameOptions([hallStyle.defaultFrameStyle], draft.frame_color, draft.mat, draft.mat_color)[0], value: "inherit", label: "Hall default" },
@@ -127,26 +137,9 @@ export function ArtworkEditor({ artwork, imageUrl, halls, storyMuseum }: { artwo
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{saved.title}</h1>
           {imageUrl ? (
-            <StoryExportButton
-              mode="admin"
-              museum={storyMuseum}
-              artwork={{
-                title: draft.title || saved.title,
-                year: draft.year === "" ? null : Number(draft.year),
-                imageUrl,
-                aspect: ratio,
-                frameStyle: effectiveFrame,
-                frameColor: draft.frame_color,
-                mat: draft.mat,
-                matColor: draft.mat_color,
-              }}
-              halls={storyHallsFromRows(halls)}
-              hallId={draft.hall_id || null}
-              themeVars={ADMIN_THEME.cssVars}
-              className={btnSecondary}
-            >
+            <PhotoExportButton mode="admin" museum={exportMuseum} artworkId={artwork.id} className={btnSecondary}>
               Export as image
-            </StoryExportButton>
+            </PhotoExportButton>
           ) : null}
         </div>
       </div>

@@ -7,23 +7,20 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { deleteArtworks, moveArtworksToHall, reorderArtworks } from "@/app/admin/actions/artworks";
-import { StoryExportButton } from "@/components/story/StoryExportButton";
-import { ADMIN_THEME } from "@/lib/admin/theme";
-import type { StoryArtworkInfo, StoryHallInfo, StoryMuseumInfo } from "@/lib/story/plan";
+import { PhotoExportButton } from "@/components/gallery/export/PhotoExportButton";
+import type { ViewerMuseum } from "@/lib/viewer-model";
 import { btnDanger, btnIconSm, btnSecondary, cardClass, EmptyState, Spinner } from "@/components/admin/ui";
 import { UploadPanel } from "./UploadPanel";
 
 type ArtworkItem = { id: string; title: string; hallId: string | null; imageUrl: string | null; isActive: boolean };
 type HallItem = { id: string; name: string };
 
-type StoryData = { museum: StoryMuseumInfo; halls: StoryHallInfo[]; artworks: Record<string, StoryArtworkInfo> };
-
-type Props = { museumId: string; halls: HallItem[]; artworks: ArtworkItem[]; story: StoryData };
+type Props = { museumId: string; halls: HallItem[]; artworks: ArtworkItem[]; viewerMuseum: ViewerMuseum };
 
 const ALL = "all";
 const NONE = "none";
 
-export function ArtworksManager({ museumId, halls, artworks: initial, story }: Props) {
+export function ArtworksManager({ museumId, halls, artworks: initial, viewerMuseum }: Props) {
   const router = useRouter();
   const [artworks, setArtworks] = useState(initial);
   const [syncedFrom, setSyncedFrom] = useState(initial);
@@ -216,14 +213,11 @@ export function ArtworksManager({ museumId, halls, artworks: initial, story }: P
                     <Pencil aria-hidden className="size-3.5" />
                     Edit
                   </Link>
-                  {story.artworks[artwork.id] ? (
-                    <StoryExportButton
+                  {artwork.imageUrl ? (
+                    <PhotoExportButton
                       mode="admin"
-                      museum={story.museum}
-                      artwork={story.artworks[artwork.id]}
-                      halls={story.halls}
-                      hallId={artwork.hallId}
-                      themeVars={ADMIN_THEME.cssVars}
+                      museum={viewerMuseum}
+                      artworkId={artwork.id}
                       ariaLabel={`Export ${artwork.title} as an image`}
                       className={`${btnIconSm} [&>svg]:size-4`}
                     />

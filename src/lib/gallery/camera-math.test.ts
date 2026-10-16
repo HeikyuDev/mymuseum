@@ -3,7 +3,7 @@ import {
   DEFAULT_TUNING,
   framingDistance,
   horizontalFov,
-  pitchForFloorShare,
+  pitchForFocus,
   restingPose,
   smoothDamp,
   travelTime,
@@ -31,28 +31,31 @@ describe("framingDistance", () => {
 });
 
 describe("restingPose", () => {
-  it("puts the wall base at the requested share of the viewport", () => {
+  it("puts the subject in the middle of the wall area and keeps the floor to a thin strip", () => {
     const aspect = 1.6;
-    const pose = restingPose(3, 1.8, 1.6, aspect);
-    const { position, target } = pose;
+    const focusY = 1.35;
+    const { position, target } = restingPose(3, 1.8, 1.4, focusY, aspect);
+    const tanV = Math.tan((DEFAULT_TUNING.fov * Math.PI) / 360);
     const pitch = Math.atan((position.y - target.y) / position.z);
-    const baseAngle = Math.atan(position.y / position.z);
-    const relative = baseAngle - pitch; // below the optical axis
-    const ndc = -Math.tan(relative) / Math.tan((DEFAULT_TUNING.fov * Math.PI) / 360);
-    const share = (ndc + 1) / 2;
-    expect(share).toBeCloseTo(DEFAULT_TUNING.floorShare, 2);
-    expect(pitchForFloorShare(position.z)).toBeCloseTo(pitch, 6);
+    const ndc = (angleBelowHorizon: number) => -Math.tan(angleBelowHorizon - pitch) / tanV;
+    const focusNdc = ndc(Math.atan((position.y - focusY) / position.z));
+    expect(focusNdc).toBeCloseTo(DEFAULT_TUNING.floorShare, 5);
+    const baseNdc = ndc(Math.atan(position.y / position.z));
+    const floorShare = (baseNdc + 1) / 2;
+    expect(floorShare).toBeGreaterThan(0.1);
+    expect(floorShare).toBeLessThan(0.3);
+    expect(pitchForFocus(position.z, focusY)).toBeCloseTo(pitch, 6);
   });
 
   it("keeps x aligned with the stop and looks at the wall plane", () => {
-    const pose = restingPose(-4.2, 1, 1, 1.6);
+    const pose = restingPose(-4.2, 1, 1, 1.5, 1.6);
     expect(pose.position.x).toBe(-4.2);
     expect(pose.target.x).toBe(-4.2);
     expect(pose.target.z).toBe(0);
   });
 
   it("zooms in closer when asked", () => {
-    expect(restingPose(0, 1.5, 1.2, 1.6, DEFAULT_TUNING, 0.6).position.z).toBeLessThan(restingPose(0, 1.5, 1.2, 1.6).position.z);
+    expect(restingPose(0, 1.5, 1.2, 1.4, 1.6, DEFAULT_TUNING, 0.6).position.z).toBeLessThan(restingPose(0, 1.5, 1.2, 1.4, 1.6).position.z);
   });
 });
 
@@ -93,6 +96,6 @@ describe("travelTime", () => {
   it("is instant with reduced motion and bounded otherwise", () => {
     expect(travelTime(12, true)).toBeLessThan(0.01);
     expect(travelTime(1, false)).toBeLessThan(travelTime(30, false));
-    expect(travelTime(500, false)).toBeLessThanOrEqual(1.35);
+    expect(travelTime(500, false)).toBeLessThanOrEqual(1.6);
   });
 });

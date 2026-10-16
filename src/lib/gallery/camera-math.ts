@@ -8,7 +8,7 @@ export type Vec3 = { x: number; y: number; z: number };
 
 export type RailTuning = {
   fov: number;
-  /** Portion of the viewport height the stop's content may take. */
+  /** Portion of the wall area (viewport above the floor strip) the stop's content may take. */
   fillV: number;
   /** Portion of the viewport width the stop's content may take. */
   fillH: number;
@@ -21,9 +21,9 @@ export type RailTuning = {
 
 export const DEFAULT_TUNING: RailTuning = {
   fov: DEFAULT_FOV,
-  fillV: 0.5,
-  fillH: 0.62,
-  minDistance: 2.7,
+  fillV: 0.62,
+  fillH: 0.7,
+  minDistance: 3.2,
   maxDistance: 7.5,
   floorShare: 0.2,
   eyeHeight: EYE_HEIGHT,
@@ -39,28 +39,29 @@ export function horizontalFov(vfovDeg: number, aspect: number): number {
 export function framingDistance(targetW: number, targetH: number, aspect: number, tuning: RailTuning = DEFAULT_TUNING): number {
   const tanV = Math.tan(rad(tuning.fov) / 2);
   const tanH = tanV * Math.max(aspect, 0.1);
-  const byHeight = targetH / tuning.fillV / (2 * tanV);
+  const byHeight = targetH / (tuning.fillV * (1 - tuning.floorShare)) / (2 * tanV);
   const byWidth = targetW / tuning.fillH / (2 * tanH);
   return Math.min(tuning.maxDistance, Math.max(tuning.minDistance, byHeight, byWidth));
 }
 
 /**
- * Downward pitch (radians) that puts the wall base at `floorShare` of the
- * viewport height, so the wall dominates and the floor stays a thin foreground.
+ * Downward pitch (radians) that puts the subject's center (wall height `focusY`)
+ * in the middle of the wall area, i.e. at the middle of the viewport above the
+ * floor strip. The floor then fills about `floorShare` of the frame (a little
+ * more when the camera backs away), never half of it.
  */
-export function pitchForFloorShare(distance: number, tuning: RailTuning = DEFAULT_TUNING): number {
-  const baseAngle = Math.atan(tuning.eyeHeight / distance);
-  const ndc = -(1 - 2 * tuning.floorShare); // wall base position in NDC y
-  const relative = Math.atan(ndc * -Math.tan(rad(tuning.fov) / 2));
-  return Math.max(0, baseAngle - relative);
+export function pitchForFocus(distance: number, focusY: number, tuning: RailTuning = DEFAULT_TUNING): number {
+  const focusAngle = Math.atan((tuning.eyeHeight - focusY) / distance); // below the horizon
+  const centerNdc = tuning.floorShare; // middle of [-(1 - 2f), 1]
+  return Math.max(0, focusAngle + Math.atan(centerNdc * Math.tan(rad(tuning.fov) / 2)));
 }
 
 export type RailPose = { position: Vec3; target: Vec3 };
 
 /** Resting pose for a stop centered at wall position `x`. */
-export function restingPose(x: number, targetW: number, targetH: number, aspect: number, tuning: RailTuning = DEFAULT_TUNING, zoom = 1): RailPose {
+export function restingPose(x: number, targetW: number, targetH: number, focusY: number, aspect: number, tuning: RailTuning = DEFAULT_TUNING, zoom = 1): RailPose {
   const distance = framingDistance(targetW, targetH, aspect, tuning) * zoom;
-  const pitch = pitchForFloorShare(distance, tuning);
+  const pitch = pitchForFocus(distance, focusY, tuning);
   return {
     position: { x, y: tuning.eyeHeight, z: distance },
     target: { x, y: tuning.eyeHeight - Math.tan(pitch) * distance, z: 0 },
@@ -101,5 +102,5 @@ export function isSettled(state: DampState, target: number, positionEpsilon = 0.
 /** Longer hops (across halls) take a little longer, bounded so nothing drags. */
 export function travelTime(distance: number, reducedMotion: boolean): number {
   if (reducedMotion) return 0.0001;
-  return Math.min(1.35, 0.55 + Math.abs(distance) * 0.05);
+  return Math.min(1.6, 0.7 + Math.abs(distance) * 0.06);
 }

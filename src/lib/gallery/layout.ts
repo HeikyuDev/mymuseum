@@ -9,13 +9,13 @@ export const EYE_CENTER = 1.55; // height of the artwork centers (m)
 export const WALL_HEIGHT = 4.2;
 export const ROOM_DEPTH = 8;
 export const PORTAL_WIDTH = 3.6;
-export const PORTAL_HEIGHT = 3.15;
+export const PORTAL_HEIGHT = 2.85;
 export const LOBBY_LENGTH = 7; // walking room before the first portal
 const START_PAD = 1.5; // portal edge -> first artwork edge
 const END_PAD = 1.5; // last artwork edge -> next portal edge
 const END_CAP = 2.2; // last artwork edge -> closing wall of the museum
 const PLAQUE_GAP = 0.2;
-const PLAQUE_HEIGHT = 0.17;
+const PLAQUE_HEIGHT = 0.21;
 
 export type LayoutArtworkInput = {
   id: string;
@@ -61,8 +61,8 @@ export type ZoneSpan = {
 };
 
 export type CameraStop =
-  | { id: string; kind: "hall"; zoneIndex: number; x: number; targetW: number; targetH: number }
-  | { id: string; kind: "artwork"; zoneIndex: number; x: number; artworkIndex: number; targetW: number; targetH: number };
+  | { id: string; kind: "hall"; zoneIndex: number; x: number; targetW: number; targetH: number; focusY: number }
+  | { id: string; kind: "artwork"; zoneIndex: number; x: number; artworkIndex: number; targetW: number; targetH: number; focusY: number };
 
 export type MuseumLayout = {
   zones: ZoneSpan[];
@@ -83,7 +83,7 @@ export function gapBetween(leftOuterW: number, rightOuterW: number): number {
 }
 
 export function plaqueWidth(title: string, outerW: number): number {
-  return clamp(0.24 + title.trim().length * 0.034, 0.5, Math.max(0.5, Math.min(outerW, 1.15)));
+  return clamp(0.3 + title.trim().length * 0.04, 0.6, Math.max(0.6, Math.min(outerW, 1.2)));
 }
 
 export function buildLayout(input: readonly LayoutZoneInput[]): MuseumLayout {
@@ -105,7 +105,8 @@ export function buildLayout(input: readonly LayoutZoneInput[]): MuseumLayout {
       zoneIndex,
       x: portalX,
       targetW: PORTAL_WIDTH + 1.4,
-      targetH: PORTAL_HEIGHT + 0.6,
+      targetH: PORTAL_HEIGHT + 0.9,
+      focusY: (PORTAL_HEIGHT + 0.9) / 2 + 0.35,
     });
 
     let cursor = portalX + PORTAL_WIDTH / 2 + START_PAD;
@@ -142,6 +143,7 @@ export function buildLayout(input: readonly LayoutZoneInput[]): MuseumLayout {
         artworkIndex: index,
         targetW: size.outerW,
         targetH: size.outerH + PLAQUE_GAP + PLAQUE_HEIGHT,
+        focusY: EYE_CENTER - (PLAQUE_GAP + PLAQUE_HEIGHT) / 2,
       });
       cursor += size.outerW;
       previousOuterW = size.outerW;

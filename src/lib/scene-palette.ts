@@ -1,7 +1,7 @@
 import type { FloorDecoration, FloorStyle, FrameStyle, LightingPreset, WallStyle } from "@/types/database";
 
-// Pure scene constants shared by the CSS viewer (components/viewer) and the
-// canvas story renderer (lib/story). No DOM, no CSS: just palettes and numbers.
+// Pure scene constants shared by the 3D gallery (components/gallery) and the
+// CSS wall and frame previews in the admin pickers. No DOM, no CSS: just palettes and numbers.
 
 export const WALL_BASE: Record<WallStyle, string> = {
   plaster: "#f1ede6",

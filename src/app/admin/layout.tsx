@@ -8,6 +8,8 @@ import { MuseumStatusBar } from "@/components/admin/MuseumStatusBar";
 import { Onboarding } from "@/components/admin/Onboarding";
 import { ADMIN_THEME } from "@/lib/admin/theme";
 import { getOwnedMuseum, requireUser } from "@/lib/auth/session";
+import { I18nProvider } from "@/lib/i18n/provider";
+import { getLocale } from "@/lib/i18n/server";
 
 export const metadata: Metadata = { title: { default: "Admin", template: "%s | MyMuseum admin" }, robots: { index: false } };
 
@@ -16,8 +18,10 @@ export const metadata: Metadata = { title: { default: "Admin", template: "%s | M
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const { profile } = await requireUser();
   const museum = await getOwnedMuseum();
+  const locale = await getLocale();
 
   return (
+    <I18nProvider initialLocale={locale}>
     <div className="flex min-h-dvh flex-col bg-canvas text-fg" style={ADMIN_THEME.cssVars}>
       <Toaster position="top-center" richColors closeButton />
       <header className="sticky top-0 z-30 border-b border-line bg-raised/95 backdrop-blur">
@@ -56,5 +60,6 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
       )}
       {museum ? <BottomNav /> : null}
     </div>
+    </I18nProvider>
   );
 }

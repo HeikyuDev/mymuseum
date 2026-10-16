@@ -41,6 +41,8 @@ export type ViewerMuseum = {
   defaultHallId: string | null;
   theme: ResolvedMuseumTheme;
   halls: ViewerHall[];
+  /** Artworks without a (visible) hall; the viewer shows them in a final "Other" zone. */
+  otherArtworks: ViewerArtwork[];
 };
 
 /**
@@ -72,8 +74,8 @@ const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_ord
 
 /**
  * Builds the viewer model. Halls must already be filtered (visibility) and
- * artworks too (active); unassigned artworks and artworks without an image
- * are skipped, as on the public page.
+ * artworks too (active); artworks without an image are skipped and
+ * artworks whose hall is missing end up in `otherArtworks`.
  */
 export function buildViewerMuseum(input: {
   museum: MuseumInput;
@@ -85,13 +87,15 @@ export function buildViewerMuseum(input: {
   const hallById = new Map(hallRows.map((hall) => [hall.id, hall]));
 
   const artworksByHall = new Map<string, ViewerArtwork[]>();
+  const otherArtworks: ViewerArtwork[] = [];
   const coverById = new Map<string, string>();
   for (const row of [...input.artworks].sort(bySortOrder)) {
     const hall = row.hall_id ? hallById.get(row.hall_id) : undefined;
     const imageUrl = artworkImageUrl(row);
-    if (!hall || !imageUrl) continue;
+    if (!imageUrl) continue;
     coverById.set(row.id, imageUrl);
-    const list = artworksByHall.get(hall.id) ?? [];
+    const defaultFrame = resolveHallStyle(hall ?? {}).defaultFrameStyle;
+    const list = hall ? (artworksByHall.get(hall.id) ?? []) : otherArtworks;
     list.push({
       id: row.id,
       title: row.title,
@@ -100,12 +104,12 @@ export function buildViewerMuseum(input: {
       year: row.year,
       imageUrl,
       aspect: aspectOf(row),
-      frameStyle: resolveFrameStyle(row.frame_style, resolveHallStyle(hall).defaultFrameStyle),
+      frameStyle: resolveFrameStyle(row.frame_style, defaultFrame),
       frameColor: row.frame_color,
       mat: row.mat,
       matColor: row.mat_color,
     });
-    artworksByHall.set(hall.id, list);
+    if (hall) artworksByHall.set(hall.id, list);
   }
 
   const halls: ViewerHall[] = hallRows.map((hall) => {
@@ -131,5 +135,6 @@ export function buildViewerMuseum(input: {
     defaultHallId: halls.some((h) => h.id === museum.default_hall_id) ? (museum.default_hall_id ?? null) : null,
     theme: resolveMuseumTheme(museum),
     halls,
+    otherArtworks,
   };
 }
