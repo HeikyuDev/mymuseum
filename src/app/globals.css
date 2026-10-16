@@ -1,15 +1,39 @@
 @import "tailwindcss";
 
-:root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+/* All colors, fonts and radii come from CSS variables set by resolveMuseumTheme(). */
+@theme inline {
+  --color-canvas: var(--v-canvas);
+  --color-raised: var(--v-raised);
+  --color-surface: var(--v-surface);
+  --color-fg: var(--v-fg);
+  --color-muted: var(--v-muted);
+  --color-line: var(--v-line);
+  --color-accent: var(--v-accent);
+  --color-accent-text: var(--v-accent-text);
+  --color-on-accent: var(--v-on-accent);
+  --font-display: var(--v-font-display);
+  --font-body: var(--v-font-body);
+  --radius-theme: var(--v-radius);
 }
 
 body {
-  background-color: var(--background);
-  color: var(--foreground);
+  background-color: var(--v-canvas);
+  color: var(--v-fg);
+  font-family: var(--v-font-body);
   margin: 0;
-  padding: 0;
-  overflow-x: hidden;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 3px solid var(--v-accent-text);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
