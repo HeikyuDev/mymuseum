@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { fontVariables } from "@/lib/fonts";
-import { getLocale } from "@/lib/i18n/server";
+import { getLocale, getT } from "@/lib/i18n/server";
 import { resolveMuseumTheme } from "@/lib/theme";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "MyMuseum",
-  description: "Create and share your own virtual museum.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: { default: t("common.appName"), template: "%s | MyMuseum" }, description: t("home.metaDescription") };
+}
 
 // Default (white gallery) theme; museum pages override these variables.
 const defaultTheme = resolveMuseumTheme();

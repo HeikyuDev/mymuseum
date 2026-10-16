@@ -3,11 +3,13 @@
 import { AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useActionState, useState } from "react";
 import { btnPrimary, Field, inputClass, Spinner } from "@/components/ui/panel";
+import { useI18n } from "@/lib/i18n/provider";
 import { signIn, type LoginState } from "./actions";
 
 const initialState: LoginState = {};
 
 export function LoginForm({ next, notice }: { next: string | null; notice: string | null }) {
+  const { t } = useI18n();
   const [state, formAction, pending] = useActionState(signIn, initialState);
   const [showPassword, setShowPassword] = useState(false);
   const message = state.error ?? notice;
@@ -26,7 +28,7 @@ export function LoginForm({ next, notice }: { next: string | null; notice: strin
         </div>
       ) : null}
 
-      <Field id="email" label="Email">
+      <Field id="email" label={t("auth.email")}>
         <input
           id="email"
           name="email"
@@ -43,7 +45,7 @@ export function LoginForm({ next, notice }: { next: string | null; notice: strin
         />
       </Field>
 
-      <Field id="password" label="Password">
+      <Field id="password" label={t("auth.password")}>
         <div className="relative">
           <input
             id="password"
@@ -57,7 +59,7 @@ export function LoginForm({ next, notice }: { next: string | null; notice: strin
           <button
             type="button"
             onClick={() => setShowPassword((value) => !value)}
-            aria-label={showPassword ? "Hide password" : "Show password"}
+            aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
             aria-pressed={showPassword}
             className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted hover:text-fg"
           >
@@ -68,7 +70,7 @@ export function LoginForm({ next, notice }: { next: string | null; notice: strin
 
       <button type="submit" disabled={pending} className={`${btnPrimary} w-full`}>
         {pending ? <Spinner /> : null}
-        {pending ? "Signing in" : "Sign in"}
+        {pending ? t("auth.submitting") : t("auth.submit")}
       </button>
     </form>
   );
