@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateMuseumData } from "@/lib/museum-cache";
 import { fail, failDb, failText, failValidation, type ActionResult } from "@/lib/action-result";
 import { accountGuardError, isDeleteConfirmed } from "@/lib/admin/guards";
 import { generateTempPassword } from "@/lib/admin/password";
@@ -241,7 +242,10 @@ export async function deleteClient(id: string, confirmation: string): Promise<Ac
   const failed = await purgeMuseumFolders(admin, museumList.map((museum) => museum.id));
   if (failed > 0) warning = (await getT())("warn.filesNotRemoved", { count: failed });
 
-  for (const museum of museumList) revalidatePath(`/m/${museum.slug}`);
+  for (const museum of museumList) {
+    revalidatePath(`/m/${museum.slug}`);
+    revalidateMuseumData(museum.slug);
+  }
   revalidateAdmin();
   return { ok: true, data: { warning } };
 }
@@ -264,6 +268,7 @@ export async function forceUnpublishMuseum(id: string): Promise<ActionResult> {
   if (!data?.length) return fail("err.museumNotFound");
 
   revalidatePath(`/m/${data[0].slug}`);
+  revalidateMuseumData(data[0].slug);
   revalidateAdmin();
   return { ok: true, data: undefined };
 }

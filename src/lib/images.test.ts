@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aspectRatioOf, fitWithin, titleFromFileName, validateImageFile } from "./images";
+import { aspectRatioOf, fitWithin, mayHaveThumb, thumbPathFor, titleFromFileName, validateImageFile } from "./images";
 
 describe("fitWithin", () => {
   it("keeps images that already fit", () => {
@@ -34,5 +34,23 @@ describe("titleFromFileName", () => {
     expect(titleFromFileName("sunset_over-sea.JPG")).toBe("sunset over sea");
     expect(titleFromFileName(".png")).toBe("Untitled");
     expect(titleFromFileName(".png", "Sin título")).toBe("Sin título");
+  });
+});
+
+describe("thumbPathFor", () => {
+  it("derives the thumbnail path from the original", () => {
+    expect(thumbPathFor("m1/abc-123.webp")).toBe("m1/thumbs/abc-123.webp");
+    expect(thumbPathFor("m1/abc-123.jpg")).toBe("m1/thumbs/abc-123.webp");
+  });
+  it("returns null for paths outside the convention", () => {
+    expect(thumbPathFor(null)).toBeNull();
+    expect(thumbPathFor("")).toBeNull();
+    expect(thumbPathFor("m1/thumbs/abc.webp")).toBeNull();
+    expect(thumbPathFor("abc.webp")).toBeNull();
+  });
+  it("only expects thumbnails for recent artworks", () => {
+    expect(mayHaveThumb("2026-10-20T10:00:00Z")).toBe(true);
+    expect(mayHaveThumb("2026-01-01T00:00:00Z")).toBe(false);
+    expect(mayHaveThumb(null)).toBe(false);
   });
 });

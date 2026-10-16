@@ -1,4 +1,5 @@
 import { FRAME_STYLES, resolveHallStyle, type ResolvedHallStyle } from "@/lib/hall-style";
+import { mayHaveThumb, thumbPathFor } from "@/lib/images";
 import { getArtworkPublicUrl } from "@/lib/supabase/storage";
 import { resolveMuseumTheme, type ResolvedMuseumTheme } from "@/lib/theme";
 import type { ArtworkRow, FrameStyle, HallRow, MuseumRow } from "@/types/database";
@@ -14,6 +15,8 @@ export type ViewerArtwork = {
   author: string | null;
   year: number | null;
   imageUrl: string;
+  /** Small (640px) copy stored next to the original; absent for older artworks. The viewer falls back to `imageUrl` when it 404s. */
+  thumbUrl?: string | null;
   aspect: number | null;
   frameStyle: FrameStyle;
   frameColor: string | null;
@@ -60,6 +63,13 @@ export function artworkImageUrl(row: Pick<ArtworkRow, "image_path" | "external_i
   return row.external_image_url || null;
 }
 
+/** Public URL of the thumbnail an upload may have, or null when none is expected. */
+export function artworkThumbUrl(row: Pick<ArtworkRow, "image_path" | "created_at">): string | null {
+  if (!row.image_path || !mayHaveThumb(row.created_at)) return null;
+  const path = thumbPathFor(row.image_path);
+  return path ? getArtworkPublicUrl(path) : null;
+}
+
 function aspectOf(row: Pick<ArtworkRow, "aspect_ratio" | "width_px" | "height_px">): number | null {
   const ratio = Number(row.aspect_ratio);
   if (Number.isFinite(ratio) && ratio > 0) return ratio;
@@ -70,6 +80,16 @@ function aspectOf(row: Pick<ArtworkRow, "aspect_ratio" | "width_px" | "height_px
 type MuseumInput = Pick<MuseumRow, "id" | "slug" | "title" | "tagline" | "description" | "cover_image_path"> &
   Partial<Pick<MuseumRow, "theme_preset" | "accent_color" | "font_pairing" | "theme_overrides" | "default_hall_id">>;
 
+/** Columns of a hall the viewer reads (the public page selects only these). */
+export const VIEWER_HALL_COLUMNS =
+  "id, name, description, sort_order, cover_artwork_id, wall_style, wall_color, floor_style, floor_decoration, floor_decoration_color, lighting_preset, default_frame_style, accent_color, decor";
+export type ViewerHallRow = Pick<HallRow, "id" | "name" | "description" | "sort_order" | "cover_artwork_id" | "wall_style" | "wall_color" | "floor_style" | "floor_decoration" | "floor_decoration_color" | "lighting_preset" | "default_frame_style" | "accent_color" | "decor">;
+
+/** Columns of an artwork the viewer reads. */
+export const VIEWER_ARTWORK_COLUMNS =
+  "id, hall_id, title, description, author_name, year, image_path, external_image_url, aspect_ratio, width_px, height_px, frame_style, frame_color, mat, mat_color, sort_order, created_at";
+export type ViewerArtworkRow = Pick<ArtworkRow, "id" | "hall_id" | "title" | "description" | "author_name" | "year" | "image_path" | "external_image_url" | "aspect_ratio" | "width_px" | "height_px" | "frame_style" | "frame_color" | "mat" | "mat_color" | "sort_order" | "created_at">;
+
 const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order;
 
 /**
@@ -79,8 +99,8 @@ const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_ord
  */
 export function buildViewerMuseum(input: {
   museum: MuseumInput;
-  halls: readonly HallRow[];
-  artworks: readonly ArtworkRow[];
+  halls: readonly ViewerHallRow[];
+  artworks: readonly ViewerArtworkRow[];
 }): ViewerMuseum {
   const { museum } = input;
   const hallRows = [...input.halls].sort(bySortOrder);
@@ -103,6 +123,7 @@ export function buildViewerMuseum(input: {
       author: row.author_name,
       year: row.year,
       imageUrl,
+      thumbUrl: artworkThumbUrl(row),
       aspect: aspectOf(row),
       frameStyle: resolveFrameStyle(row.frame_style, defaultFrame),
       frameColor: row.frame_color,

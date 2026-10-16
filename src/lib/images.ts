@@ -48,3 +48,27 @@ export function titleFromFileName(name: string, fallback = "Untitled"): string {
   const base = name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
   return (base || fallback).slice(0, 160);
 }
+
+export const THUMB_MAX_SIDE = 640;
+export const THUMB_QUALITY = 0.8;
+/** Artworks created before thumbnails existed skip the lookup and load the original directly. */
+export const THUMBS_SINCE = "2026-10-16T00:00:00Z";
+
+/**
+ * Deterministic thumbnail location for an uploaded image: `{museum}/{id}.{ext}` becomes
+ * `{museum}/thumbs/{id}.webp`. Returns null for any other path shape (no thumbnail convention).
+ */
+export function thumbPathFor(imagePath: string | null | undefined): string | null {
+  if (!imagePath) return null;
+  const parts = imagePath.split("/");
+  if (parts.length !== 2 || !parts[0] || !parts[1] || parts[0] === "thumbs") return null;
+  const base = parts[1].replace(/.[^.]+$/, "");
+  return base ? `${parts[0]}/thumbs/${base}.webp` : null;
+}
+
+/** Whether an artwork created at `createdAt` can have a thumbnail (older ones never do). */
+export function mayHaveThumb(createdAt: string | null | undefined): boolean {
+  if (!createdAt) return false;
+  const time = Date.parse(createdAt);
+  return Number.isFinite(time) && time >= Date.parse(THUMBS_SINCE);
+}

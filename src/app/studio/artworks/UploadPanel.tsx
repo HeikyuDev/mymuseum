@@ -7,7 +7,7 @@ import { createArtworks } from "@/app/studio/actions/artworks";
 import { cardClass, Spinner } from "@/components/ui/panel";
 import { translateCode } from "@/lib/i18n";
 import { useI18n } from "@/lib/i18n/provider";
-import { ACCEPTED_IMAGE_TYPES, titleFromFileName } from "@/lib/images";
+import { ACCEPTED_IMAGE_TYPES, thumbPathFor, titleFromFileName } from "@/lib/images";
 import { prepareImage } from "@/lib/images-client";
 import { removeFromArtworks, uploadToArtworks } from "@/lib/storage-upload";
 
@@ -36,6 +36,7 @@ export function UploadPanel({ museumId, halls, hallId, onHallChange, onFinished 
 
   async function processFile(key: string, file: File, targetHall: string | null): Promise<boolean> {
     let uploadedPath: string | null = null;
+    let uploadedThumb: string | null = null;
     try {
       update(key, { status: "processing" });
       const prepared = await prepareImage(file);
@@ -45,6 +46,16 @@ export function UploadPanel({ museumId, halls, hallId, onHallChange, onFinished 
       update(key, { status: "uploading", progress: 0 });
       await uploadToArtworks(path, prepared.blob, prepared.contentType, (progress) => update(key, { progress }));
       uploadedPath = path;
+      // The 3D viewer loads this small copy first. It is best effort: without it the viewer uses the original.
+      const thumbPath = thumbPathFor(path);
+      if (prepared.thumb && thumbPath) {
+        try {
+          await uploadToArtworks(thumbPath, prepared.thumb, "image/webp", () => {});
+          uploadedThumb = thumbPath;
+        } catch {
+          // Ignored on purpose.
+        }
+      }
 
       update(key, { status: "saving" });
       const result = await createArtworks([
@@ -63,7 +74,7 @@ export function UploadPanel({ museumId, halls, hallId, onHallChange, onFinished 
       return true;
     } catch (error) {
       // The row was not created: do not leave an orphan file in Storage.
-      if (uploadedPath) await removeFromArtworks([uploadedPath]);
+      if (uploadedPath) await removeFromArtworks([uploadedPath, ...(uploadedThumb ? [uploadedThumb] : [])]);
       // Client helpers throw message codes; server errors arrive already localized.
       const message = error instanceof Error ? translateCode(t, error.message) : t("img.uploadFailed");
       update(key, { status: "error", error: message });

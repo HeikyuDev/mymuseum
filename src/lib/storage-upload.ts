@@ -29,7 +29,8 @@ export async function uploadToArtworks(
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.setRequestHeader("apikey", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
     xhr.setRequestHeader("Content-Type", contentType);
-    xhr.setRequestHeader("Cache-Control", "max-age=31536000");
+    // Object names are unique ids that never change, so browsers and the CDN may keep them for a year.
+    xhr.setRequestHeader("Cache-Control", "public, max-age=31536000, immutable");
     xhr.setRequestHeader("x-upsert", "false");
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(event.loaded / event.total);

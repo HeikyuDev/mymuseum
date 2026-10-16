@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { MuseumGallery } from "@/components/gallery/MuseumGallery";
+import { GalleryLoader } from "@/components/gallery/GalleryLoader";
 import { createTranslator } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/provider";
 import { getLocale } from "@/lib/i18n/server";
@@ -36,7 +36,7 @@ export default async function MuseumPage({ params }: PageProps<"/m/[slug]">) {
   return (
     <div className="h-dvh overflow-hidden bg-canvas text-fg" style={museum.theme.cssVars}>
       <I18nProvider initialLocale={locale}>
-        <MuseumGallery museum={museum} />
+        <GalleryLoader museum={museum} />
       </I18nProvider>
     </div>
   );
