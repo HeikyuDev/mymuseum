@@ -7,10 +7,11 @@
 MyMuseum is a multi-tenant platform for virtual museums. Each client gets their own museum with halls (categories), framed artworks and a fully customizable look, published at a public link.
 
 - **Halls and artworks**: a museum is a sequence of halls; each hall holds framed artworks with title, author, year and description.
-- **2.5D viewer**: a button-only experience (no free camera) with animated gliding between artworks and doorway transitions between halls. Works with touch, mouse and keyboard.
+- **3D viewer**: visitors open `/m/[slug]` straight inside one continuous museum, rendered in real time with react-three-fiber. The camera runs on rails (no free movement): arrow buttons, the keyboard or a click on an artwork glide it between works and through the archways that separate halls.
 - **Customization**: museum theme presets, accent color and font pairing; per-hall wall, floor, lighting, frame style and floor decorations (carpets, rugs, spotlight pool) plus decor such as rope barriers, benches and plants.
-- **Live preview**: the admin editors render the real viewer while you edit.
-- **Image export**: turn any artwork into a share-ready picture of the museum wall (Story 9:16, Post 4:5 or Square 1:1) with the hall's wall, lighting and frame. See [Image export](#image-export).
+- **Live preview**: the admin editors render the same 3D scene (embedded, light quality) while you edit.
+- **Languages**: the viewer is Spanish by default with an English toggle (`lang` cookie, optional per-museum default).
+- **Image export**: a real photograph of the 3D museum taken at the artwork's spot (Story 9:16, Post 4:5 or Square 1:1). See [Image export](#image-export).
 
 ## Areas and roles
 
@@ -46,7 +47,7 @@ flowchart LR
 museums.theme_preset / accent_color / font_pairing / theme_overrides
         -> resolveMuseumTheme()  (src/lib/theme.ts)   -> CSS variables on the page root
 halls.wall_style / floor_style / floor_decoration / lighting / frame / decor
-        -> resolveHallStyle()    (src/lib/hall-style.ts) -> viewer scene (src/components/viewer)
+        -> resolveHallStyle()    (src/lib/hall-style.ts) -> 3D scene (src/components/gallery)
 ```
 
 The admin area uses the same tokens with a fixed neutral palette (`src/lib/admin/theme.ts`), so it stays readable whatever a museum looks like.
@@ -65,7 +66,8 @@ src/
   components/
     admin/               shared admin UI (buttons, fields, nav, previews, pickers)
     super/               super admin UI (password field, credentials panel, pagination)
-    viewer/              2.5D scene, frames, decorations, landing, detail view
+    gallery/             3D museum: scene, camera rail, frames, portals, lighting, export
+    viewer/              CSS frame and wall previews used by the admin pickers
   lib/
     auth/                getAuthState/requireUser/requireRole, redirect safety
     supabase/            server, browser and service-role clients, storage URLs
@@ -75,6 +77,9 @@ src/
     theme.ts             museum theme presets and CSS variable resolution
     hall-style.ts        hall style options and resolution
     viewer-model.ts      pure viewer data model
+    gallery/             pure 3D logic: layout engine, camera rail math, quality tiers, scene look
+    photo/               export formats, safe zones, photographic composition
+    i18n/                es/en dictionaries, typed t(), locale cookie, switch action
   proxy.ts               session refresh and first-line route protection
   types/database.ts      hand-written row types matching the migrations
 supabase/
@@ -104,27 +109,44 @@ Security model:
 - **Service role is server-only.** `SUPABASE_SERVICE_ROLE_KEY` is used by `src/lib/supabase/admin.ts` (marked `server-only`) for creating, updating and deleting auth users and for Storage cleanup. It is never sent to the browser.
 - **Super admin guard rails.** Server actions re-check the role on every call; a super admin cannot disable or delete themselves or the last active super admin. Passwords are never logged or stored; a generated password is shown once.
 
-## Image export
-
-Every artwork can be exported as a picture that looks like a photograph of the museum wall: the hall's real wall style and lighting, the artwork hanging centered with its frame, thickness and cast shadow, and the artwork title below it. Nothing is uploaded; the image is drawn in the browser and shared or downloaded from there.
-
-- **Visitors** (public viewer): a single **Download image** button in the artwork detail panel. They only pick a format; the look is automatic (the hall's style, photo-friendly defaults, a small museum watermark) and the text comes from the artwork. The caption shows only the title, plus the year as a small discreet line. The author and description are never shown.
-- **Owners** (admin, artworks list and editor): the same dialog with advanced options: edit the export title, small detail line and an optional description, choose another hall or wall preset, show the floor and decoration, tint the wall, change lighting (spotlight, vignette, grain), frame, mat, caption style, text color and watermark, and pick JPEG for a smaller file. The last-used style options are remembered in `localStorage` (text is not).
-- **Access control**: `museums.theme_overrides.allowVisitorExport` (default `true`, no migration) turns visitor downloads off in **Admin > Appearance > Sharing**. Owners can always export.
-- **Share or download**: the Web Share API with a file where supported (so it can go straight to Instagram or WhatsApp), otherwise a download named `{museum}-{artwork}-{format}.png`.
-
-How it works:
+## 3D viewer
 
 ```text
-resolveHallStyle / resolveMuseumTheme + artwork + photo statistics
-        -> resolveStoryPlan()   (src/lib/story/plan.ts)    fully resolved plan
-        -> renderStory()        (src/lib/story/render.ts)  Canvas 2D: wall, floor, light, frame, caption
+ViewerMuseum -> galleryZones() -> buildLayout()   (src/lib/gallery, pure and unit tested)
+                      |                 |
+                      |                 +-> artwork positions, portals, camera stops
+                      +-> zoneLook()    wall, floor, decoration, lighting per hall
+GalleryScene (src/components/gallery): lights, camera rail, zones, portals, artworks
 ```
 
-- A pure Canvas 2D renderer (no DOM-to-image) so the output is identical on iOS Safari, Android Chrome and desktop. Layout math (fit for any aspect ratio, Instagram safe zones, text wrapping and auto-fit, color heuristics, filenames) lives in pure modules under `src/lib/story` and is unit tested.
-- Photo-friendly "Auto": wide mat, thin frame, a mat and frame tone that suit the photo and the wall, a slightly dimmed bright wall behind a bright photo, text color chosen by contrast against the real pixels behind it, and a plaque for busy wall textures. Low-resolution photos are never upscaled more than 3x, and EXIF orientation is respected.
-- Photos are loaded with CORS (`crossOrigin="anonymous"`), so the image host must send CORS headers (the Supabase public bucket does). If it does not, the dialog shows a clear message instead of failing silently.
-- Palettes shared with the CSS viewer live in `src/lib/scene-palette.ts`.
+- **One continuous gallery.** Halls are consecutive zones of a long wall. Artwork positions come from their real aspect ratios (equal visual weight, spacing proportional to widths, centers at 1.55 m). Halls are separated by stone archways with the hall name; artworks without a hall form an "Other" zone at the end.
+- **Camera on rails.** One stop per artwork plus one per hall entrance. The camera is critically damped (smoothDamp), eased, with a short settling sway and a gaze that trails the body, so travel across halls is continuous. `prefers-reduced-motion` cuts instead of gliding.
+- **Materials.** Procedural wall (plaster, brick, concrete, wood, marble, velvet, linen) and floor (parquet, marble, concrete, carpet, dark wood) textures with bump and roughness; real mitred frame mouldings with mat, glass and canvas variants; carpets, rugs, light pools, benches, plants and rope barriers as geometry.
+- **Light.** A pool of spotlights follows the artworks nearest the camera (only a few cast shadows), plus hemisphere and fill light blended across halls. The museum theme preset tints the room.
+- **Quality tiers** (`src/lib/gallery/quality.ts`): `low`, `medium` and `high` are chosen from the device (memory, cores, pointer, software renderer). Low drops shadows, reflections and props; high adds soft shadows and a floor reflection. `?quality=low|medium|high` forces a tier. Rendering is on demand: a resting camera costs no GPU time, offscreen admin previews are paused, textures are capped per tier and only loaded near the camera, and shaders are compiled in parallel behind the loading screen.
+- **Fallback.** Without WebGL, visitors see a notice and a plain list of the artworks.
+- **Languages.** Strings live in `src/lib/i18n` (Spanish default). The `lang` cookie is set by a server action; `theme_overrides.defaultLocale` (`es` or `en`) is the museum default for visitors without a cookie.
+
+## Image export
+
+Every artwork can be exported as a photograph of the museum: the same 3D scene the visitor walks through, shot from a camera standing at the artwork's spot with the real walls, floor, carpet, lighting, frame and placard. Nothing is invented and nothing is uploaded; the picture is rendered in the browser.
+
+- **Visitors**: one **Download image** button in the viewer. They only pick a format (Story 9:16 at 1080x1920 with the top 250 px and bottom 340 px kept clear, Post 4:5 at 1080x1350, Square 1:1 at 1080x1080). The title appears on the in-scene placard; a small museum watermark sits at the bottom of the safe area.
+- **Owners** (admin, artworks list and editor): the same dialog with a few real scene choices: lighting preset, vignette, film grain, watermark and JPEG. The editor exports the unsaved frame and mat choices.
+- **Access control**: `museums.theme_overrides.allowVisitorExport` (default `true`) turns visitor downloads off in **Admin > Appearance > Sharing**. Owners can always export.
+- **Share or download**: the Web Share API with a file where supported, otherwise a download named `{museum}-{artwork}-{format}.png`.
+
+How it works (`src/components/gallery/export`, `src/lib/photo`):
+
+```text
+ViewerMuseum + artwork -> composePhoto()     (pure: distance, lens shift, safe zones)
+                       -> offscreen react-three-fiber root running GalleryScene (export tier, shadows, reflection)
+                       -> finishPhoto()      (vignette, grain, watermark on a 2D canvas)
+```
+
+- The camera is level and uses a lens shift, so the artwork sits in the middle of the safe area without converging verticals, and a strip of the real floor stays in frame.
+- Photos are loaded with CORS (`crossOrigin="anonymous"`) so the canvas stays untainted; the Supabase public bucket sends the headers.
+- The scene is rendered with 1.5x supersampling and downscaled; if the device cannot allocate it, it falls back to 1.25x and 1x.
 
 <!-- DEMO: add GIF here -->
 
@@ -198,7 +220,9 @@ The app deploys to [Vercel](https://vercel.com) as a standard Next.js project.
 | 2 | Public 2.5D viewer and theming | Done |
 | 3 | Museum admin: halls, artworks, appearance, settings, live preview | Done |
 | 4 | Super admin: client onboarding and account management | Done |
-| 5 | Image export: museum-styled Story, Post and Square images of an artwork | Done |
+| 5 | Image export of an artwork (replaced in 6A by real 3D photographs) | Done |
+| 6A | Real-time 3D viewer on rails, Spanish/English viewer, 3D admin previews and photo export | Done |
+| 6B | Admin route and role restructuring, one museum per user, admin translation | Planned |
 
 Known gaps: storage usage per museum is not tracked, and there is no self-service password change for clients yet.
 
