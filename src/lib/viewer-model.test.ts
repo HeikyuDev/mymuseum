@@ -40,4 +40,9 @@ describe("resolveMuseumTheme", () => {
     expect(resolveMuseumTheme({ theme_overrides: { allowVisitorExport: false } }).overrides.allowVisitorExport).toBe(false);
     expect(resolveMuseumTheme({ theme_overrides: { allowVisitorExport: "no" } }).overrides.allowVisitorExport).toBe(true);
   });
+  it("defaults the museum language to Spanish and honors defaultLocale", () => {
+    expect(resolveMuseumTheme({}).overrides.defaultLocale).toBe("es");
+    expect(resolveMuseumTheme({ theme_overrides: { defaultLocale: "en" } }).overrides.defaultLocale).toBe("en");
+    expect(resolveMuseumTheme({ theme_overrides: { defaultLocale: "fr" } }).overrides.defaultLocale).toBe("es");
+  });
 });

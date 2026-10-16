@@ -64,6 +64,7 @@ export const appearanceSchema = z.object({
     density: enumOf(THEME_OVERRIDE_OPTIONS.density),
     motion: enumOf(THEME_OVERRIDE_OPTIONS.motion),
     allowVisitorExport: z.boolean().default(true),
+    defaultLocale: z.enum(["es", "en"]).default("es"),
   }),
   default_hall_id: optionalUuid,
   cover_image_path: z.string().max(300).nullish().transform((value) => value || null),

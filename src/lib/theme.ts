@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { DEFAULT_LOCALE, resolveLocale, type Locale } from "@/lib/i18n";
 import type { FontPairing, MuseumRow, ThemePreset } from "@/types/database";
 
 export const DEFAULT_THEME_PRESET: ThemePreset = "light_modern";
@@ -165,6 +166,8 @@ export type ThemeOverrides = {
   motion: keyof typeof MOTION;
   /** Whether public visitors may download the museum-styled image of an artwork. */
   allowVisitorExport: boolean;
+  /** Language shown to visitors who have not picked one yet. */
+  defaultLocale: Locale;
 };
 
 export const DEFAULT_OVERRIDES: ThemeOverrides = {
@@ -172,6 +175,7 @@ export const DEFAULT_OVERRIDES: ThemeOverrides = {
   density: "comfortable",
   motion: "normal",
   allowVisitorExport: true,
+  defaultLocale: DEFAULT_LOCALE,
 };
 
 function pick<K extends string>(table: Record<K, unknown>, raw: unknown, fallback: K): K {
@@ -192,6 +196,7 @@ export function resolveOverrides(raw: unknown): ThemeOverrides {
     motion: pick(MOTION, bag.motion, DEFAULT_OVERRIDES.motion),
     allowVisitorExport:
       typeof bag.allowVisitorExport === "boolean" ? bag.allowVisitorExport : DEFAULT_OVERRIDES.allowVisitorExport,
+    defaultLocale: resolveLocale(bag.defaultLocale),
   };
 }
 
