@@ -7,7 +7,7 @@
 MyMuseum is a multi-tenant platform for virtual museums. The platform owner creates client accounts; each client signs in and creates **their own museum** (exactly one per account) with categories (halls), framed artworks and a fully customizable look, published at a public link.
 
 - **Halls and artworks**: a museum is a sequence of halls; each hall holds framed artworks with title, author, year and description.
-- **3D viewer**: visitors open `/m/[slug]` straight inside one continuous museum, rendered in real time with react-three-fiber. The camera runs on rails (no free movement): arrow buttons, the keyboard or a click on an artwork glide it between works and through the archways that separate halls. A visit opens in front of a solid, lettered entrance wall.
+- **3D viewer**: visitors open `/m/[slug]` straight inside one continuous museum, rendered in real time with react-three-fiber. The camera runs on rails (no free movement): arrow buttons, the keyboard or a click on an artwork glide it along the wall between works and past the divider walls that separate categories. A visit opens in front of a solid, lettered entrance wall.
 - **Customization**: museum theme presets, accent color and font pairing; per-hall wall, floor, lighting, frame style and floor decorations (carpets, rugs, spotlight pool) plus decor such as rope barriers, benches and plants.
 - **Live preview**: the studio editors render the same 3D scene (embedded, light quality) while you edit.
 - **Languages**: everything is Spanish by default with an English alternative: the login page, the platform admin, the studio and the public viewer. An ES/EN switch (`lang` cookie) sits on the login page and in both panel headers; each museum also has a default language for its visitors (Studio > Settings).
@@ -74,7 +74,7 @@ src/
     ui/                  shared panel UI (buttons, fields, nav, language switcher, status badge)
     studio/              studio UI (pickers, previews, onboarding, save bar, share card)
     admin/               platform admin UI (password field, credentials panel, pagination, badges)
-    gallery/             3D museum: scene, camera rail, frames, portals, lighting, export
+    gallery/             3D museum: scene, camera rail, frames, dividers, lighting, export
     viewer/              CSS frame and wall previews used by the admin pickers
   lib/
     auth/                getAuthState/requireUser/requireRole/getOwnMuseum, route areas and redirect safety
@@ -124,12 +124,12 @@ Security model:
 ```text
 ViewerMuseum -> galleryZones() -> buildLayout()   (src/lib/gallery, pure and unit tested)
                       |                 |
-                      |                 +-> artwork positions, portals, camera stops
+                      |                 +-> artwork positions, dividers, camera stops
                       +-> zoneLook()    wall, floor, decoration, lighting per hall
-GalleryScene (src/components/gallery): lights, camera rail, zones, portals, artworks
+GalleryScene (src/components/gallery): lights, camera rail, zones, dividers, artworks
 ```
 
-- **One continuous gallery.** Halls are consecutive zones of a long wall. Artwork positions come from their real aspect ratios (equal visual weight, spacing proportional to widths, centers at 1.62 m, small photos scaled up to a minimum visual size). The museum starts at a modern entrance wall (fine microcement in a neutral tone of the first hall, the museum name in large minimal lettering, a recessed LED strip along the ceiling line; there is no doorway at the start), and halls after the first are separated by stone archways with the hall name and a lit vestibule; artworks without a hall form an "Other" zone at the end, closed by a matching end wall.
+- **One continuous gallery.** Halls are consecutive zones of a long wall. Artwork positions come from their real aspect ratios (equal visual weight, spacing proportional to widths, centers at 1.62 m, small photos scaled up to a minimum visual size). The museum starts at a modern entrance wall (fine microcement in a neutral tone of the first hall, the museum name in large minimal lettering, a recessed LED strip along the ceiling line; there is no doorway at the start), and categories are separated by a solid divider wall on the same wall plane (the same microcement, LED strip and baseboard, with the category name in large minimal lettering and the museum name under a hairline; floor, ceiling and carpets run straight through it, there are no doorways anywhere); categories without active artworks are left out of the public museum and its menu; artworks without a hall form an "Other" zone at the end, closed by a matching end wall.
 - **Camera on rails.** One stop per artwork plus one per hall entrance (the first one frames the entrance wall, where the opening glide starts). Every move is a glide of fixed duration (0.9 s for a hop between works up to 1.7 s across the museum) along a smootherstep curve evaluated from elapsed time (`glideAt` in `camera-math.ts`): deterministic, no overshoot, position and gaze on the same curve, and an interrupted glide hands its velocity to the next one. A frame never advances the glide by more than 80 ms, and the glide clock starts on the first frame after the request, so a hitch cannot make the camera jump. The rail keeps its state in plain objects (no React state while moving). `prefers-reduced-motion` cuts instead of gliding.
 - **Materials.** Procedural wall (plaster, brick, concrete, wood, marble, velvet, linen) and floor (parquet, marble, concrete, carpet, dark wood) textures with bump and roughness; real mitred frame mouldings with mat, glass and canvas variants; carpets, rugs, light pools, benches, plants and rope barriers as geometry.
 - **Light.** A pool of spotlights follows the artworks nearest the camera (only a few cast shadows), plus hemisphere and fill light blended across halls. The museum theme preset tints the room. Photos are drawn unlit and untonemapped, so they keep their true colors. Each category has a **Lighting** mode (Default, Soft, Dim, Off) and a **Brightness** slider (40-120%), stored in the existing `halls.decor` jsonb as `lightMode` and `brightness` (validated in `src/lib/hall-style.ts` and `schemas.ts`, no migration). Off means no spotlights and no glare: flat natural light.
@@ -142,7 +142,7 @@ GalleryScene (src/components/gallery): lights, camera rail, zones, portals, artw
 The viewer is built to stay fluid on a mid-range phone. What matters, in order:
 
 - **Nothing over the canvas blends it.** The floating controls use flat semi-opaque fills (no `backdrop-filter`, no big shadows, nothing animated but `transform` and `opacity`), the canvas is opaque (`alpha: false`, no stencil) and the baked tier's vignette is a quad inside the canvas, not a CSS layer.
-- **The scene does not re-render while the camera moves.** Zones, portals and artworks live in a memoized subtree whose inputs never include the current stop. The focus, the motion flags and the scene callbacks are plain mutable objects (`context.tsx`); artworks subscribe to their distance band with `useSyncExternalStore` and re-render only when it changes. The camera rail keeps its state in typed arrays and allocates nothing per frame.
+- **The scene does not re-render while the camera moves.** Zones, dividers and artworks live in a memoized subtree whose inputs never include the current stop. The focus, the motion flags and the scene callbacks are plain mutable objects (`context.tsx`); artworks subscribe to their distance band with `useSyncExternalStore` and re-render only when it changes. The camera rail keeps its state in typed arrays and allocates nothing per frame.
 - **Photos never cost a glide.** `photo-store.ts` owns every photo texture: it loads the thumbnail (or the capped original) of the artwork in front of the camera and its neighbours at once, and postpones prefetching and the full-size upgrade until the camera has rested for 280 ms. Photos are decoded straight to their target size in a background thread (`createImageBitmap(blob, { resize })`; resizing an existing bitmap runs synchronously on the main thread, see `image-size.ts`), then uploaded one per frame with `renderer.initTexture`, full-size ones only at rest. Textures are kept for artworks within the load radius plus two and freed (after a short delay) beyond it.
 - **Everything the first sight of a hall needs is prepared behind the loading screen.** All materials are compiled (and, with a planar reflection, compiled again for render targets), then every zone and artwork is drawn once so its geometry and procedural textures are on the GPU before the camera gets near.
 - **Shadows are drawn on demand.** The casters never move and a spotlight only changes place when it is assigned to another artwork, so the shadow maps are refreshed on assignment instead of every frame. Spotlights are assigned to where the camera is heading, which puts that refresh in the first frame of a glide, where nothing has moved yet.
@@ -268,7 +268,7 @@ The app deploys to [Vercel](https://vercel.com) as a standard Next.js project.
 | 5 | Image export of an artwork (replaced in 6A by real 3D photographs) | Done |
 | 6A | Real-time 3D viewer on rails, Spanish/English viewer, 3D admin previews and photo export | Done |
 | 6B | Platform admin at `/admin`, owner studio at `/studio`, one museum per user, Spanish-first panels | Done |
-| 6C-6D | Quality tiers, hall vestibules, mobile fluidity (time-based glides, photo pipeline, degradation ladder), modern entrance wall, richer baked tier | Done |
+| 6C-6D | Quality tiers, category divider walls, mobile fluidity (time-based glides, photo pipeline, degradation ladder), modern entrance wall, richer baked tier | Done |
 
 Known gaps: storage usage per museum is not tracked, and there is no self-service password change for clients yet.
 
