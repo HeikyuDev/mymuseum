@@ -12,13 +12,15 @@ import { useGallery } from "./context";
 type Slot = { art: number; level: number; target: number };
 
 const SPOT_Z = 2.5;
+/** Lowest hemisphere intensity of the baked tier (dramatic halls are 0.3 on the lit tiers). */
+const BAKED_MIN_HEMI = 0.5;
 
 /**
  * Hemisphere + fill + pooled spotlights + a procedural reflection environment.
  * The cheap tier (and halls whose lighting is Off) use no real spotlights at all.
  */
 export function Lighting() {
-  const { layout, looks, mood, quality, cameraX, snapshot } = useGallery();
+  const { layout, looks, mood, quality, cameraX, motion, snapshot } = useGallery();
   const scene = useThree((state) => state.scene);
   const gl = useThree((state) => state.gl);
   const invalidate = useThree((state) => state.invalidate);
@@ -27,7 +29,10 @@ export function Lighting() {
   const fill = useRef<DirectionalLight>(null);
 
   // Without real spotlights the ambient light carries the room: lift it so the cheap tier is not gloomy.
-  const ambientBoost = quality.baked ? 2.3 : 1;
+  // Lambert surfaces get color * irradiance / PI, so without spotlights the ambient light has to carry a factor
+  // of roughly PI to light a room (the pools of light themselves are baked into the vertex colors).
+  const ambientBoost = quality.baked ? 5.4 : 1;
+  const exposureScale = 1;
   const colors = useMemo(() => ({ a: new Color(), b: new Color() }), []);
 
   // Artworks that can be lit by a spotlight (zones whose lighting is not Off), sorted by x.
@@ -60,11 +65,15 @@ export function Lighting() {
   useEffect(() => {
     gl.shadowMap.enabled = quality.shadows;
     gl.shadowMap.type = PCFSoftShadowMap;
+    // The casters never move and a spotlight only changes place when it is re-assigned to another artwork,
+    // so the shadow maps are drawn on demand (below) instead of twice per frame while the camera glides.
+    gl.shadowMap.autoUpdate = snapshot;
+    gl.shadowMap.needsUpdate = true;
     scene.fog = new Fog(mood.background, 22, 70);
     return () => {
       scene.fog = null;
     };
-  }, [gl, scene, quality.shadows, mood.background]);
+  }, [gl, scene, quality.shadows, mood.background, snapshot, pool]);
 
   useEffect(
     () => () => {
@@ -108,7 +117,9 @@ export function Lighting() {
       hemi.current.color.copy(colors.a);
       colors.a.set(from.hemiGround).lerp(colors.b.set(to.hemiGround), t);
       hemi.current.groundColor.copy(colors.a);
-      hemi.current.intensity = lerp(from.hemiIntensity, to.hemiIntensity) * mood.ambientScale * ambientBoost;
+      // Without spotlights a dramatic hall would just be dark: the baked pools carry its mood, the ambient light keeps a floor.
+      const hemiIntensity = lerp(from.hemiIntensity, to.hemiIntensity);
+      hemi.current.intensity = (quality.baked ? Math.max(hemiIntensity, BAKED_MIN_HEMI) : hemiIntensity) * mood.ambientScale * ambientBoost;
     }
     if (fill.current) {
       colors.a.set(from.fill).lerp(colors.b.set(to.fill), t);
@@ -122,12 +133,15 @@ export function Lighting() {
       colors.a.set(from.fog).lerp(colors.b.set(to.fog), t);
       (scene.fog as Fog).color.copy(colors.a);
     }
-    gl.toneMappingExposure = lerp(from.exposure, to.exposure);
+    gl.toneMappingExposure = lerp(from.exposure, to.exposure) * exposureScale;
 
     if (pool.length === 0) return;
 
-    // ---- spotlight pool: the lights follow the artworks nearest the camera (no allocations) ----
-    nearestIndices(spotXs, cameraX.current, wantedView);
+    // ---- spotlight pool: the lights go to the artworks nearest where the camera is heading (no allocations) ----
+    // Assigning them when a glide is requested, not when the camera passes the midpoint between two works,
+    // puts the shadow refresh in the first frame (where nothing has moved yet) and lets the lights fade in
+    // during the glide.
+    nearestIndices(spotXs, snapshot ? cameraX.current : motion.targetX, wantedView);
     let animating = false;
 
     for (const { slot } of pool) {
@@ -151,6 +165,7 @@ export function Lighting() {
       if (!free) break;
       free.art = index;
       free.target = 1;
+      gl.shadowMap.needsUpdate = true;
       if (snapshot) free.level = 1;
     }
 

@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, ChevronRight, Gauge, Languages, List } from "lucide-react";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { hallStopIndex } from "@/lib/gallery/layout";
-import { LOW_SCALES, lowerTier, scaledQuality, tierForPreference, type GovernorAction, type QualityPreference, type QualityTier } from "@/lib/gallery/quality";
+import { maxLevel, resolveQuality, tierForPreference, type QualityPreference, type QualityTier } from "@/lib/gallery/quality";
 import { useI18n } from "@/lib/i18n/provider";
 import { sceneMood } from "@/lib/gallery/scene-look";
 import type { ViewerMuseum } from "@/lib/viewer-model";
@@ -47,23 +47,26 @@ export function MuseumGallery({ museum }: Props) {
   const [compiledTier, setCompiledTier] = useState<QualityTier | null>(null);
   const [menuQuality, setMenuQuality] = useState(false);
   const [preference, setPreference] = useState<QualityPreference>(() => (typeof window === "undefined" ? "auto" : readPreference()));
-  const [governed, setGoverned] = useState<{ tier: QualityTier | null; step: number }>({ tier: null, step: 0 });
+  const [governedLevel, setGovernedLevel] = useState(0);
   const perfDebug = useSyncExternalStore(noopSubscribe, isPerfDebug, () => false);
   const progress = useLoadProgress();
   const startedAt = useRef<number | null>(null);
 
-  // Tier: the URL override wins, then the visitor's choice, then what the governor has lowered it to.
-  const tier: QualityTier | null = device
-    ? device.forced
-      ? device.tier
-      : preference !== "auto"
-        ? tierForPreference(preference, device.tier)
-        : (governed.tier ?? device.tier)
-    : null;
-  const scaleStep = tier === "low" ? governed.step : 0;
-  const quality = useMemo(() => (tier ? scaledQuality(tier, LOW_SCALES[scaleStep] ?? 1) : null), [tier, scaleStep]);
+  // Starting tier: the URL override wins, then the visitor's choice, then what the device looks capable of.
+  // In Auto the governor then walks down the ladder (resolution, shadows and reflection, baked tier last).
+  const start: QualityTier | null = device ? (device.forced ? device.tier : preference !== "auto" ? tierForPreference(preference, device.tier) : device.tier) : null;
+  const auto = Boolean(device && !device.forced && preference === "auto");
+  const level = auto ? governedLevel : 0;
+  const quality = useMemo(() => {
+    if (!start || !device) return null;
+    const resolved = resolveQuality(start, level, device.mobile);
+    // Diagnostics only (?debug=perf&dynres=off): measure the cost of the dynamic resolution itself.
+    return perfDebug && new URLSearchParams(window.location.search).get("dynres") === "off" ? { ...resolved, moveScale: 1 } : resolved;
+  }, [start, level, device, perfDebug]);
+  const tier = quality?.tier ?? null;
   const compiled = compiledTier !== null && compiledTier === tier;
-  const governorOn = Boolean(device && !device.forced && preference === "auto" && released);
+  const governorOn = auto && released;
+  const canDegrade = start !== null && level < maxLevel(start);
   // Development only: ?motion=full lets automated browsers that report reduced motion preview the animations.
   const forceMotion = process.env.NODE_ENV !== "production" && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("motion") === "full";
   const reducedMotion = (device?.reducedMotion ?? false) && !forceMotion;
@@ -83,18 +86,12 @@ export function MuseumGallery({ museum }: Props) {
 
   const markCompiled = useCallback(() => setCompiledTier(tier), [tier]);
 
-  const onGovernor = useCallback(
-    (action: GovernorAction) => {
-      if (action === "tier-down") setGoverned((g) => ({ ...g, tier: lowerTier(g.tier ?? device?.tier ?? "low") }));
-      else if (action === "scale-down") setGoverned((g) => ({ ...g, step: g.step + 1 }));
-    },
-    [device],
-  );
+  const onDegrade = useCallback(() => setGovernedLevel((value) => value + 1), []);
 
   const choosePreference = useCallback((value: QualityPreference) => {
     setPreference(value);
     writePreference(value);
-    setGoverned({ tier: null, step: 0 });
+    setGovernedLevel(0);
     setMenuQuality(false);
   }, []);
 
@@ -182,10 +179,10 @@ export function MuseumGallery({ museum }: Props) {
           telemetry={process.env.NODE_ENV !== "production" ? exposeTelemetry : undefined}
           extras={
             <>
-              <PerfGovernor tier={quality.tier} scaleStep={scaleStep} enabled={governorOn} onAction={onGovernor} />
+              <PerfGovernor tier={quality.tier} enabled={governorOn} canDegrade={canDegrade} onDegrade={onDegrade} />
               {perfDebug ? (
                 <Suspense fallback={null}>
-                  <PerfProbe tier={quality.tier} scale={LOW_SCALES[scaleStep] ?? 1} />
+                  <PerfProbe tier={quality.tier} level={level} />
                 </Suspense>
               ) : null}
             </>
@@ -241,7 +238,7 @@ export function MuseumGallery({ museum }: Props) {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.18 }}
-                    className="relative mt-2 flex min-w-52 flex-col rounded-3xl bg-black/40 p-1.5 text-white shadow-2xl ring-1 ring-white/20 backdrop-blur-xl"
+                    className="relative mt-2 flex min-w-52 flex-col rounded-3xl bg-black/75 p-1.5 text-white ring-1 ring-white/20"
                   >
                     {zones.map((item, index) => {
                       const target = hallStopIndex(layout, index);
@@ -288,7 +285,7 @@ export function MuseumGallery({ museum }: Props) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.45, delay: 0.25 }}
-              className="pointer-events-none absolute inset-x-16 bottom-5 z-10 truncate text-center font-display text-base tracking-wide text-white [text-shadow:0_1px_14px_rgba(0,0,0,0.65)] sm:bottom-8 sm:text-xl"
+              className="pointer-events-none absolute inset-x-16 bottom-5 z-10 truncate text-center font-display text-base tracking-wide text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.7),0_0_6px_rgba(0,0,0,0.4)] sm:bottom-8 sm:text-xl"
             >
               {caption}
             </motion.p>
@@ -329,7 +326,7 @@ function QualityControl({ open, onToggle, value, onChange }: { open: boolean; on
   return (
     <div className="absolute right-3 bottom-3 z-20 flex flex-col items-end gap-2 sm:right-6 sm:bottom-6">
       {open ? (
-        <div role="radiogroup" aria-label={t("viewer.quality")} className="flex flex-col gap-1 rounded-3xl bg-black/45 p-1.5 text-white shadow-2xl ring-1 ring-white/20 backdrop-blur-xl">
+        <div role="radiogroup" aria-label={t("viewer.quality")} className="flex flex-col gap-1 rounded-3xl bg-black/75 p-1.5 text-white ring-1 ring-white/20">
           {options.map((option) => (
             <button
               key={option.id}

@@ -38,26 +38,25 @@ function frameMaterial(style: FrameStyle, color: string): FrameMaterial {
 const mm = (value: number) => value.toFixed(3);
 
 export function Artwork({ placement, artwork, wallIsDark }: Props) {
-  const { quality, fonts, softShadow, surfaces, resources, baked, looks, placeholderPhoto, focusArtwork, onSelectArtwork, onPhotoSettled, snapshot } = useGallery();
+  const { quality, fonts, softShadow, surfaces, resources, looks, placeholderPhoto, callbacks, snapshot } = useGallery();
   const look = looks[placement.zoneIndex];
-  const distance = Math.abs(placement.index - focusArtwork);
-  const active = distance <= quality.loadRadius;
   const { photo, status } = usePhotoTexture({
+    id: placement.id,
+    index: placement.index,
+    loadRadius: quality.loadRadius,
     url: artwork.imageUrl,
     // Photo exports always render the original: a thumbnail would blur the picture.
     thumbUrl: snapshot ? null : artwork.thumbUrl,
-    enabled: active,
-    upgrade: !snapshot && quality.upgradeFocus && distance === 0,
-    maxSize: quality.photoTextureMax,
-    neighbourSize: snapshot ? quality.photoTextureMax : Math.min(1024, quality.photoTextureMax),
+    upgrade: !snapshot && quality.upgradeFocus,
+    fullSize: quality.photoTextureMax,
+    smallSize: snapshot ? quality.photoTextureMax : Math.min(1024, quality.photoTextureMax),
     anisotropy: quality.anisotropy,
     maxLoads: quality.maxLoads,
-    blocking: distance <= 1,
   });
   useEffect(() => {
-    if (status === "ready") onPhotoSettled?.(placement.index, true);
-    else if (status === "error") onPhotoSettled?.(placement.index, false);
-  }, [status, placement.index, onPhotoSettled]);
+    if (status === "ready") callbacks.current.onPhotoSettled?.(placement.index, true);
+    else if (status === "error") callbacks.current.onPhotoSettled?.(placement.index, false);
+  }, [status, placement.index, callbacks]);
 
   const { imageW, imageH, openingW, openingH, outerW, outerH, matW, depth, frameStyle } = placement;
   const spec = FRAME_SPECS[frameStyle];
@@ -120,7 +119,7 @@ export function Artwork({ placement, artwork, wallIsDark }: Props) {
 
   const px = placement.plaque.x - placement.x;
   const py = placement.plaque.y - placement.y;
-  const select = () => onSelectArtwork?.(placement.index);
+  const select = () => callbacks.current.onSelectArtwork?.(placement.index);
   const gray = Math.round(photoLevel(look.lighting) * 255).toString(16).padStart(2, "0");
   const photoTint = `#${gray}${gray}${gray}`;
 
@@ -135,18 +134,10 @@ export function Artwork({ placement, artwork, wallIsDark }: Props) {
   );
   const canvasMaterial = resources.surface(`canvas:${frameColor}`, { color: frameColor, roughness: 0.9 });
 
-  const glowGeometry = useMemo(
-    () => (quality.baked ? resources.geometry(`glow:${mm(outerW)}x${mm(outerH)}`, () => new PlaneGeometry(outerW * 2.7 + 0.6, outerH * 2.5 + 0.6)) : null),
-    [quality.baked, outerW, outerH, resources],
-  );
-  const glowMaterial = quality.baked && look.lighting.glow > 0 ? resources.basic(`glow:${look.lighting.glow}`, { map: baked.glow, opacity: 0.3 * look.lighting.glow, additive: true }) : null;
-
   const cullRange = useMemo(() => [placement.x - outerW / 2, placement.x + outerW / 2], [placement.x, outerW]);
 
   return (
     <group position={[placement.x, placement.y, 0]} userData={{ cull: cullRange }}>
-      {glowGeometry && glowMaterial ? <mesh geometry={glowGeometry} material={glowMaterial} position={[0, 0.1, 0.001]} renderOrder={1} /> : null}
-
       {/* soft contact shadow, always on, so frames never look pasted onto the wall */}
       <mesh geometry={shadowGeometry} material={shadowMaterial} position={[shadowOffset[0], shadowOffset[1], 0.0015]} renderOrder={1} />
 

@@ -63,7 +63,7 @@ export class Resources {
         transparent: params.transparent ?? (params.opacity !== undefined || params.additive === true),
         opacity: params.opacity ?? 1,
         depthWrite: params.depthWrite ?? params.additive !== true,
-        side: params.side,
+        ...definedOnly({ side: params.side }),
         toneMapped: false,
       });
       if (params.additive) material.blending = 2; // AdditiveBlending
@@ -93,10 +93,15 @@ export class Resources {
   ): MeshStandardMaterial | MeshLambertMaterial {
     return this.material(`surface:${this.simple ? "s" : "p"}:${key}`, () => {
       if (this.simple) {
-        // Metals read as dark without reflections; lift them toward their own color.
+        // Metals read as dark without reflections: a gentle emissive of their own color keeps gold looking like gold.
         const color = new Color(params.color ?? "#ffffff");
-        if ((params.metalness ?? 0) > 0.5) color.multiplyScalar(0.85);
-        return new MeshLambertMaterial({ color, map: params.map ?? null, side: params.side, vertexColors: params.vertexColors });
+        const metal = (params.metalness ?? 0) > 0.5;
+        return new MeshLambertMaterial({
+          color,
+          map: params.map ?? null,
+          ...(metal ? { emissive: color.clone(), emissiveIntensity: 0.4 } : {}),
+          ...definedOnly({ side: params.side, vertexColors: params.vertexColors }),
+        });
       }
       return new MeshStandardMaterial({
         color: params.color ?? "#ffffff",
@@ -107,8 +112,7 @@ export class Resources {
         roughness: params.roughness ?? 0.9,
         metalness: params.metalness ?? 0,
         envMapIntensity: (params.envMapIntensity ?? 0.25) * (params.shine ?? 1),
-        side: params.side,
-        vertexColors: params.vertexColors,
+        ...definedOnly({ side: params.side, vertexColors: params.vertexColors }),
       });
     });
   }
@@ -128,6 +132,11 @@ export class Resources {
     this.materials.clear();
     this.textures.clear();
   }
+}
+
+/** Material parameters set to `undefined` make three log a warning each; leave them out instead. */
+function definedOnly<T extends Record<string, unknown>>(params: T): Partial<T> {
+  return Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined)) as Partial<T>;
 }
 
 /** Paints every vertex of a geometry with one color (for merged props that share one material). */

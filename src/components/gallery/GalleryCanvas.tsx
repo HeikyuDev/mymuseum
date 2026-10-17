@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace } from "three";
+import { ACESFilmicToneMapping, NeutralToneMapping, PCFSoftShadowMap, SRGBColorSpace } from "three";
 import type { QualitySettings } from "@/lib/gallery/quality";
 import { GalleryScene, type GallerySceneProps } from "./GalleryScene";
 import { isPerfDebug } from "./perf-store";
@@ -27,12 +27,13 @@ export function GalleryCanvas({ quality, interactive = true, frameloop = "demand
       frameloop={frameloop}
       shadows={quality.shadows ? { type: PCFSoftShadowMap } : false}
       camera={{ fov: 46, near: 0.1, far: 90, position: [0, 1.6, 4] }}
-      gl={{ antialias: quality.antialias, powerPreference: "high-performance", alpha: false }}
+      gl={{ antialias: quality.antialias, powerPreference: "high-performance", alpha: false, stencil: false }}
       style={{ touchAction: "pan-y", pointerEvents: interactive ? "auto" : "none" }}
       onCreated={(state) => {
         const { gl } = state;
         if (process.env.NODE_ENV !== "production" || isPerfDebug()) (window as unknown as { __galleryState?: unknown }).__galleryState = state;
-        gl.toneMapping = ACESFilmicToneMapping;
+        // Filmic tone mapping greys out the unlit-looking baked walls; the neutral curve keeps their colors.
+        gl.toneMapping = quality.baked ? NeutralToneMapping : ACESFilmicToneMapping;
         gl.outputColorSpace = SRGBColorSpace;
         const canvas = gl.domElement;
         canvas.addEventListener("webglcontextlost", (event) => event.preventDefault());

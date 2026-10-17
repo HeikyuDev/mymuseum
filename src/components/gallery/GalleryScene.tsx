@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { buildLayout, type MuseumLayout } from "@/lib/gallery/layout";
 import { zoneLook, sceneMood, isDarkColor, type ZoneLook } from "@/lib/gallery/scene-look";
 import { toLayoutZones, galleryZones, type GalleryZone } from "@/lib/gallery/zones";
@@ -12,12 +12,16 @@ import { Artwork } from "./Artwork";
 import { CameraRail, type FixedCamera } from "./CameraRail";
 import { CeilingTrack } from "./CeilingTrack";
 import { Culler } from "./Culler";
-import { GalleryProvider, zoneTitle, useGallery, type GalleryContextValue } from "./context";
+import { EntranceWall } from "./EntranceWall";
+import { FocusStore, GalleryProvider, zoneTitle, useGallery, type GalleryContextValue, type MotionState, type SceneCallbacks } from "./context";
 import { Lighting } from "./Lighting";
+import { MotionResolution, TextureUploader } from "./MotionDriver";
+import { PhotoStore } from "./photo-store";
 import { Portal, PORTAL_SEGMENT_WIDTH } from "./Portal";
 import { Resources } from "./resources";
 import { SurfaceCache } from "./surface-cache";
-import { makeEdgeShadeTexture, makeFloorSheenTexture, makeInscriptionTexture, makePlaceholderTexture, makeSoftShadowTexture, makeWallGlowTexture } from "./text-textures";
+import { makeEdgeShadeTexture, makeFloorSheenTexture, makeLedWashTexture, makePlaceholderTexture, makeSoftShadowTexture, makeWallGlowTexture } from "./text-textures";
+import { ScreenVignette } from "./ScreenVignette";
 import { ShaderWarmup } from "./ShaderWarmup";
 import { Zone } from "./Zone";
 
@@ -97,12 +101,13 @@ export function GalleryScene({
   useEffect(() => () => surfaces.dispose(), [surfaces]);
   const resources = useMemo(() => new Resources(quality.simpleMaterials), [quality.simpleMaterials]);
   useEffect(() => () => resources.dispose(), [resources]);
-  const baked = useMemo(() => ({ glow: makeWallGlowTexture(), edgeShade: makeEdgeShadeTexture(0, 0.35), floorSheen: makeFloorSheenTexture() }), []);
+  const baked = useMemo(() => ({ glow: makeWallGlowTexture(), edgeShade: makeEdgeShadeTexture(0, 0.35), floorSheen: makeFloorSheenTexture(), ledWash: makeLedWashTexture() }), []);
   useEffect(
     () => () => {
       baked.glow.dispose();
       baked.edgeShade.dispose();
       baked.floorSheen.dispose();
+      baked.ledWash.dispose();
     },
     [baked],
   );
@@ -111,7 +116,20 @@ export function GalleryScene({
   const placeholderPhoto = useMemo(() => makePlaceholderTexture(), []);
   useEffect(() => () => placeholderPhoto.dispose(), [placeholderPhoto]);
 
-  const focusArtwork = focusArtworkOf(model.layout, stopIndex);
+  // The photo store, the focus and the callbacks live outside React's render cycle: moving the camera to
+  // another stop must not re-render the zones, portals and artworks (that is a burst of main-thread work
+  // exactly when the glide starts).
+  const photos = useMemo(() => new PhotoStore(!snapshot), [snapshot]);
+  useEffect(() => () => photos.dispose(), [photos]);
+  const focusIndex = focusArtworkOf(model.layout, stopIndex);
+  const focus = useMemo(() => new FocusStore(focusIndex), []); // eslint-disable-line react-hooks/exhaustive-deps -- the initial value only
+  useEffect(() => focus.set(focusIndex), [focus, focusIndex]);
+  const callbacks = useRef<SceneCallbacks>({});
+  useEffect(() => {
+    callbacks.current = { onSelectArtwork, onPhotoSettled };
+  }, [onSelectArtwork, onPhotoSettled]);
+  const motion = useMemo<MotionState>(() => ({ moving: false, restSince: 0, targetX: 0 }), []);
+
   const value = useMemo<GalleryContextValue>(
     () => ({
       layout: model.layout,
@@ -129,16 +147,14 @@ export function GalleryScene({
       accent,
       otherLabel,
       cameraX,
-      focusArtwork,
-      onSelectArtwork,
-      onPhotoSettled,
+      focus,
+      photos,
+      motion,
+      callbacks,
       snapshot,
     }),
-    [model, mood, quality, fonts, surfaces, resources, baked, placeholderPhoto, softShadow, museumTitle, accent, otherLabel, focusArtwork, onSelectArtwork, onPhotoSettled, snapshot],
+    [model, mood, quality, fonts, surfaces, resources, baked, placeholderPhoto, softShadow, museumTitle, accent, otherLabel, focus, photos, motion, snapshot],
   );
-
-  const { layout, zones, looks } = model;
-  const last = zones.length - 1;
 
   return (
     <GalleryProvider value={value}>
@@ -154,18 +170,34 @@ export function GalleryScene({
         onArrive={onArrive}
         telemetry={telemetry}
       />
+      <StaticScene />
+      <Culler />
+      {snapshot ? null : <TextureUploader />}
+      <MotionResolution />
+      {quality.baked && !snapshot ? <ScreenVignette /> : null}
+      {extras}
+      {onCompiled ? <ShaderWarmup onDone={onCompiled} /> : null}
+    </GalleryProvider>
+  );
+}
+
+/** Everything that does not depend on where the camera is: it re-renders only when the model or the quality changes. */
+const StaticScene = memo(function StaticScene() {
+  const { layout, zones, looks, quality, otherLabel } = useGallery();
+  const last = zones.length - 1;
+  return (
+    <>
       {zones.map((zone, i) => {
         const span = layout.zones[i];
         const half = PORTAL_SEGMENT_WIDTH / 2;
         const end = i < last ? layout.zones[i + 1].portalX - half : layout.maxX;
         const floorStart = i === 0 ? layout.minX : span.portalX - half;
-        const wallRanges: [number, number][] = [];
-        if (i === 0) wallRanges.push([layout.minX, span.portalX - half]);
-        wallRanges.push([span.portalX + half, end]);
+        // The first hall has no doorway: a lettered entrance wall, then the wall of the hall.
+        const wallRanges: [number, number][] = i === 0 ? [[layout.minX, layout.entrance.end], [layout.entrance.end, end]] : [[span.portalX + half, end]];
         return (
           <group key={zone.id}>
             <Zone zoneIndex={i} floorRange={[floorStart, end]} wallRanges={wallRanges} layout={layout} isFirst={i === 0} isLast={i === last} look={looks[i]} />
-            <Portal x={span.portalX} title={zoneTitle(zone, otherLabel)} look={looks[i]} fromLook={looks[i - 1] ?? looks[i]} />
+            {i > 0 ? <Portal x={span.portalX} title={zoneTitle(zone, otherLabel)} look={looks[i]} fromLook={looks[i - 1]} /> : null}
             {quality.props ? <CeilingTrack range={[floorStart, end]} xs={layout.artworks.filter((a) => a.zoneIndex === i).map((a) => a.x)} lit={looks[i].lighting.spots} /> : null}
           </group>
         );
@@ -178,36 +210,7 @@ export function GalleryScene({
           wallIsDark={isDarkColor(looks[placement.zoneIndex].wallColor)}
         />
       ))}
-      {zones.length > 0 ? <LobbyTitle /> : null}
-      <Culler />
-      {extras}
-      {onCompiled ? <ShaderWarmup onDone={onCompiled} /> : null}
-    </GalleryProvider>
+      {zones.length > 0 ? <EntranceWall /> : null}
+    </>
   );
-}
-
-function LobbyTitle() {
-  const { layout, museumTitle, fonts, looks, quality } = useGallery();
-  const dark = isDarkColor(looks[0].wallColor);
-  const texture = useMemo(
-    () =>
-      makeInscriptionTexture({
-        text: museumTitle,
-        aspect: 5,
-        family: fonts.display,
-        bodyFamily: fonts.body,
-        color: dark ? "#e5c779" : "#2d2822",
-        shadow: dark ? "rgba(0,0,0,0.65)" : "rgba(255,255,255,0.7)",
-        pixelHeight: quality.tier === "low" ? 128 : 256,
-      }),
-    [museumTitle, fonts.display, fonts.body, dark, quality.tier],
-  );
-  useEffect(() => () => texture.dispose(), [texture]);
-  const x = (layout.minX + layout.zones[0].portalX - PORTAL_SEGMENT_WIDTH / 2) / 2;
-  return (
-    <mesh position={[x, 2.45, 0.012]}>
-      <planeGeometry args={[5.2, 1.04]} />
-      <meshBasicMaterial map={texture} transparent depthWrite={false} toneMapped={false} />
-    </mesh>
-  );
-}
+});
