@@ -1,4 +1,5 @@
 import { CanvasTexture, LinearMipmapLinearFilter, SRGBColorSpace, Texture } from "three";
+import { readImageSize } from "./image-size";
 
 // Photo decoding for the 3D scene. Photos are fetched, decoded off the main thread with
 // createImageBitmap (resized on the way when they exceed the tier cap), limited to a few
@@ -18,21 +19,25 @@ export function flipPlaneUv(uv: { count: number; getY(i: number): number; setY(i
 // ---- concurrency ----------------------------------------------------------------------------
 
 let active = 0;
-const waiting: Array<() => void> = [];
+const waiting: Array<{ priority: number; wake: () => void }> = [];
 
-async function acquire(limit: number): Promise<void> {
+/** Lower priority numbers go first (the artwork in front of the camera beats a far neighbour). */
+async function acquire(limit: number, priority: number): Promise<void> {
   if (active < limit) {
     active += 1;
     return;
   }
-  await new Promise<void>((resolve) => waiting.push(resolve));
+  await new Promise<void>((resolve) => {
+    const at = waiting.findIndex((item) => item.priority > priority);
+    waiting.splice(at < 0 ? waiting.length : at, 0, { priority, wake: resolve });
+  });
   active += 1;
 }
 
 function release(limit: number) {
   active -= 1;
   // Wake as many waiters as the limit allows.
-  while (waiting.length > 0 && active < limit) waiting.shift()?.();
+  while (waiting.length > 0 && active < limit) waiting.shift()?.wake();
 }
 
 // ---- decoding -------------------------------------------------------------------------------
@@ -83,8 +88,8 @@ const supportsBitmap = typeof createImageBitmap === "function" && typeof fetch =
  * Loads one photo as a GPU texture no larger than `maxSize` on its longest side.
  * Rejects when the image is missing (callers fall back or leave the canvas blank).
  */
-export async function loadPhotoTexture(url: string, maxSize: number, anisotropy: number, maxLoads: number, signal: AbortSignal): Promise<LoadedPhoto> {
-  await acquire(maxLoads);
+export async function loadPhotoTexture(url: string, maxSize: number, anisotropy: number, maxLoads: number, signal: AbortSignal, priority = 2): Promise<LoadedPhoto> {
+  await acquire(maxLoads, priority);
   try {
     if (signal.aborted) throw new DOMException("aborted", "AbortError");
     if (!supportsBitmap) return await viaCanvas(url, maxSize, anisotropy);
@@ -100,18 +105,28 @@ export async function loadPhotoTexture(url: string, maxSize: number, anisotropy:
         URL.revokeObjectURL(objectUrl);
       }
     }
-    let bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
-    const width = bitmap.width;
-    const height = bitmap.height;
-    const scale = Math.min(1, maxSize / Math.max(width, height));
-    if (scale < 1) {
-      const resized = await createImageBitmap(bitmap, {
-        resizeWidth: Math.max(1, Math.round(width * scale)),
-        resizeHeight: Math.max(1, Math.round(height * scale)),
-        resizeQuality: "medium",
-      });
-      bitmap.close();
-      bitmap = resized;
+    // Decode and downscale in one background step when the size is known from the header. Resizing an
+    // existing bitmap would run synchronously on the main thread.
+    const size = readImageSize(await blob.slice(0, 262144).arrayBuffer());
+    let bitmap: ImageBitmap;
+    let width: number;
+    let height: number;
+    if (size) {
+      width = size.width;
+      height = size.height;
+      const scale = Math.min(1, maxSize / Math.max(width, height));
+      const resize = scale >= 1 ? {} : width >= height ? { resizeWidth: Math.max(1, Math.round(width * scale)) } : { resizeHeight: Math.max(1, Math.round(height * scale)) };
+      bitmap = await createImageBitmap(blob, { imageOrientation: "from-image", resizeQuality: "medium", ...resize });
+    } else {
+      bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
+      width = bitmap.width;
+      height = bitmap.height;
+      const scale = Math.min(1, maxSize / Math.max(width, height));
+      if (scale < 1) {
+        const resized = await createImageBitmap(bitmap, { resizeWidth: Math.max(1, Math.round(width * scale)), resizeHeight: Math.max(1, Math.round(height * scale)), resizeQuality: "medium" });
+        bitmap.close();
+        bitmap = resized;
+      }
     }
     if (signal.aborted) {
       bitmap.close();

@@ -1,105 +1,61 @@
 "use client";
 
 import { useThree } from "@react-three/fiber";
-import { useEffect, useState } from "react";
-import { DefaultLoadingManager, type Texture } from "three";
-import { loadPhotoTexture } from "./photo-loader";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
+import type { Texture } from "three";
+import { useGallery } from "./context";
+import { bandOf, type PhotoBand } from "./photo-store";
 
 export type PhotoTexture = { texture: Texture; width: number; height: number };
 export type PhotoStatus = "idle" | "loading" | "ready" | "error";
 
 type Options = {
+  /** Artwork index: identifies the photo inside the scene's store. */
+  id: string;
   url: string;
   /** Small copy of the photo; tried first and silently skipped when it does not exist. */
   thumbUrl?: string | null;
-  /** The artwork is near the camera: load something. */
-  enabled: boolean;
-  /** The camera rests on this artwork: load the full image. */
-  upgrade: boolean;
+  /** Longest side of the first texture (the thumbnail, or the capped original when there is none). */
+  smallSize: number;
   /** Longest side of the full image on the GPU. */
-  maxSize: number;
-  /** Longest side when only a neighbour needs the original (no thumbnail available). */
-  neighbourSize: number;
+  fullSize: number;
+  /** The camera resting on this artwork upgrades it to the full image. */
+  upgrade: boolean;
   anisotropy: number;
   maxLoads: number;
-  /** Counts toward the loading screen. */
-  blocking: boolean;
+  /** Artwork position in walking order. */
+  index: number;
+  loadRadius: number;
 };
 
-type Loaded = { key: string; photo: PhotoTexture };
-
 /**
- * Loads a photo as a GPU texture in two stages: the thumbnail first (and for neighbours),
- * then the full image only for the artwork the camera rests on. Textures are disposed when the
- * artwork leaves the loading window; decoding happens off the main thread.
+ * The photo texture of one artwork. What to load follows the artwork's distance band to the camera;
+ * the hook re-renders its artwork only when the band changes or a texture becomes available, never on
+ * every move of the camera.
  */
-export function usePhotoTexture({ url, thumbUrl, enabled, upgrade, maxSize, neighbourSize, anisotropy, maxLoads, blocking }: Options): { photo: PhotoTexture | null; status: PhotoStatus } {
-  const invalidate = useThree((state) => state.invalidate);
+export function usePhotoTexture({ id, url, thumbUrl, smallSize, fullSize, upgrade, anisotropy, maxLoads, index, loadRadius }: Options): { photo: PhotoTexture | null; status: PhotoStatus; band: PhotoBand } {
+  const { photos, focus } = useGallery();
   const maxAnisotropy = useThree((state) => state.gl.capabilities.getMaxAnisotropy());
   const aniso = Math.min(anisotropy, maxAnisotropy);
-  const [small, setSmall] = useState<Loaded | null>(null);
-  const [full, setFull] = useState<Loaded | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
 
-  // Stage 1: the thumbnail, or the capped original when there is none (or it 404s).
+  const band = useSyncExternalStore(
+    focus.subscribe,
+    () => bandOf(Math.abs(index - focus.get()), loadRadius),
+    () => 4 as PhotoBand,
+  );
+
   useEffect(() => {
-    if (!enabled) return;
-    const controller = new AbortController();
-    let created: Texture | null = null;
-    const hasThumb = Boolean(thumbUrl);
-    if (blocking) DefaultLoadingManager.itemStart(url);
-    const first = hasThumb ? loadPhotoTexture(thumbUrl as string, neighbourSize, aniso, maxLoads, controller.signal) : Promise.reject(new Error("no thumbnail"));
-    first
-      .catch(() => loadPhotoTexture(url, neighbourSize, aniso, maxLoads, controller.signal))
-      .then((loaded) => {
-        if (controller.signal.aborted) {
-          loaded.texture.dispose();
-          return;
-        }
-        created = loaded.texture;
-        setSmall({ key: url, photo: loaded });
-        invalidate();
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setFailed(url);
-      })
-      .finally(() => {
-        if (blocking) DefaultLoadingManager.itemEnd(url);
-      });
-    return () => {
-      controller.abort();
-      created?.dispose();
-      setSmall(null);
-    };
-  }, [url, thumbUrl, enabled, neighbourSize, aniso, maxLoads, blocking, invalidate]);
+    photos.setBand(id, { url, thumbUrl: thumbUrl ?? null, smallSize, fullSize, upgrade, anisotropy: aniso, maxLoads }, band);
+  }, [photos, id, url, thumbUrl, smallSize, fullSize, upgrade, aniso, maxLoads, band]);
 
-  // Stage 2: the full image, only while the camera rests here. Artworks without a thumbnail
-  // upgrade from their capped original the same way.
-  const wantFull = enabled && upgrade;
-  useEffect(() => {
-    if (!wantFull) return;
-    const controller = new AbortController();
-    let created: Texture | null = null;
-    loadPhotoTexture(url, maxSize, aniso, maxLoads, controller.signal)
-      .then((loaded) => {
-        if (controller.signal.aborted) {
-          loaded.texture.dispose();
-          return;
-        }
-        created = loaded.texture;
-        setFull({ key: url, photo: loaded });
-        invalidate();
-      })
-      .catch(() => undefined);
-    return () => {
-      controller.abort();
-      created?.dispose();
-      setFull(null);
-      invalidate();
-    };
-  }, [wantFull, url, maxSize, aniso, maxLoads, invalidate]);
+  const subscribe = useCallback((listener: () => void) => photos.subscribe(id, listener), [photos, id]);
+  const view = useSyncExternalStore(
+    subscribe,
+    () => photos.snapshot(id),
+    () => photos.snapshot(id),
+  );
 
-  const photo = enabled ? ((wantFull && full?.key === url ? full.photo : null) ?? (small?.key === url ? small.photo : null)) : null;
-  const status: PhotoStatus = !enabled ? "idle" : photo ? "ready" : failed === url ? "error" : "loading";
-  return { photo, status };
+  const photo = band <= 3 ? (view.full ?? view.small) : null;
+  const status: PhotoStatus = band > 2 && !photo ? "idle" : photo ? "ready" : view.failed ? "error" : "loading";
+  return { photo, status, band };
 }
