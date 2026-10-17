@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FRAME_BUDGET_MS, GOVERNOR_WINDOW, LADDERS, QUALITY, detectTier, forMobile, governorStep, initialGovernor, isWeakGpu, maxLevel, parsePreference, resolveQuality, tierAt, tierForPreference, windowStats, type GovernorState, type QualityTier } from "./quality";
+import { FRAME_BUDGET_MS, GOVERNOR_WINDOW, LADDERS, QUALITY, detectTier, forMobile, governorStep, shouldSampleFrame, initialGovernor, isWeakGpu, maxLevel, parsePreference, resolveQuality, tierAt, tierForPreference, windowStats, type GovernorState, type QualityTier } from "./quality";
 
 const desktop = { viewportWidth: 1440, coarsePointer: false, deviceMemory: 8, hardwareConcurrency: 8 };
 
@@ -124,13 +124,17 @@ describe("degradation ladder", () => {
     expect(firstBaked).toBeGreaterThan(firstLite);
     expect(levels.slice(0, firstBaked).every((q) => !q.baked)).toBe(true);
   });
-  it("walks the same resolution steps down on every start and never raises the quality", () => {
+  it("never raises the cost of the settings while walking down, and each rung is a different setting", () => {
+    const cost = (q: ReturnType<typeof resolveQuality>) => (q.baked ? 0 : 1) * 4 + (q.shadows ? 2 : 0) + (q.reflector ? 1 : 0);
     for (const start of ["high", "medium", "low"] as const) {
+      let previous = Infinity;
       let previousDpr = Infinity;
       for (let level = 0; level <= maxLevel(start); level += 1) {
         const q = resolveQuality(start, level, false);
-        if (tierAt(start, level) === LADDERS[start][level].tier) expect(q.tier).toBe(LADDERS[start][level].tier);
-        if (level > 0 && LADDERS[start][level].tier === LADDERS[start][level - 1].tier) expect(q.dpr[1]).toBeLessThanOrEqual(previousDpr);
+        expect(q.tier).toBe(tierAt(start, level));
+        expect(cost(q)).toBeLessThanOrEqual(previous);
+        if (cost(q) === previous) expect(q.dpr[1]).toBeLessThan(previousDpr);
+        previous = cost(q);
         previousDpr = q.dpr[1];
       }
     }
@@ -152,5 +156,28 @@ describe("forMobile", () => {
   });
   it("leaves export renders untouched", () => {
     expect(forMobile(QUALITY.export)).toEqual(QUALITY.export);
+  });
+});
+
+describe("shouldSampleFrame", () => {
+  const base = { frameMs: 16, hidden: false, now: 10000, quietUntil: 0, glideStartedAt: 9000, glides: 2 };
+  it("counts an ordinary frame in the middle of a glide", () => {
+    expect(shouldSampleFrame(base)).toBe(true);
+  });
+  it("ignores hidden tabs, stalls, the first frames of a glide, the opening glide and the moments after a resize", () => {
+    expect(shouldSampleFrame({ ...base, hidden: true })).toBe(false);
+    expect(shouldSampleFrame({ ...base, frameMs: 400 })).toBe(false);
+    expect(shouldSampleFrame({ ...base, glideStartedAt: 9950 })).toBe(false);
+    expect(shouldSampleFrame({ ...base, glides: 0 })).toBe(false);
+    expect(shouldSampleFrame({ ...base, quietUntil: 11000 })).toBe(false);
+  });
+  it("lets a device recover from a transient: windows made only of stalls never degrade it", () => {
+    let state = initialGovernor();
+    for (let window = 0; window < 12; window += 1) {
+      const frames = Array.from({ length: 30 }, () => 300).filter((ms) => shouldSampleFrame({ ...base, frameMs: ms }));
+      expect(frames).toHaveLength(0);
+      state = governorStep(state, 16, 0, "medium").state;
+    }
+    expect(state.over).toBe(0);
   });
 });

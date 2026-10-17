@@ -19,6 +19,10 @@ export type MotionState = {
   restSince: number;
   /** Wall position the camera is heading for (equals the camera x at rest). Spotlights are assigned to it. */
   targetX: number;
+  /** performance.now() when the current glide was requested. */
+  glideStartedAt: number;
+  /** Glides completed so far (the opening glide is the first). */
+  glides: number;
 };
 
 /** The artwork nearest to the visitor, observable without re-rendering the whole scene when it changes. */

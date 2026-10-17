@@ -108,3 +108,41 @@ export function glideDuration(distance: number, reducedMotion: boolean): number 
 
 /** Longest simulated step per frame: a hitch eats part of a glide (and the ease hides it), it never teleports the camera. */
 export const MAX_GLIDE_STEP = 0.08;
+
+export type MoveInput = {
+  /** The very first pose: nothing to animate from. */
+  first: boolean;
+  stopChanged: boolean;
+  /** The loading hold just ended: the opening glide. */
+  releasing: boolean;
+  zoomChanged: boolean;
+  aspectChanged: boolean;
+  /** Distance the camera has to travel along the wall (m). */
+  distance: number;
+  introSeconds: number;
+  reducedMotion: boolean;
+};
+
+export type MovePlan =
+  | { kind: "init" }
+  /** The target moved without a request to travel (a rebuilt pose): follow it, nothing else changes. */
+  | { kind: "follow" }
+  /** A resize or rotation: jump to the new framing without counting as a move. */
+  | { kind: "snap" }
+  | { kind: "glide"; seconds: number; /** Arriving counts as reaching a stop (fires onArrive). */ arrival: boolean };
+
+/** What the rail does when its inputs change. Pure, so every case is tested. */
+export function planMove(input: MoveInput): MovePlan {
+  if (input.first) return { kind: "init" };
+  const seconds = (value: number) => (input.reducedMotion ? 0 : value);
+  if (input.releasing) return { kind: "glide", seconds: seconds(input.introSeconds), arrival: true };
+  if (input.stopChanged) return { kind: "glide", seconds: seconds(glideDuration(input.distance, false)), arrival: true };
+  if (input.zoomChanged) return { kind: "glide", seconds: seconds(0.45), arrival: false };
+  if (input.aspectChanged) return { kind: "snap" };
+  return { kind: "follow" };
+}
+
+/** Advances a glide clock by one frame: the frame is capped so a hitch cannot teleport the camera, and the first frame after a request only starts the clock. */
+export function advanceClock(elapsed: number, delta: number, fresh: boolean): number {
+  return fresh ? elapsed : elapsed + Math.min(Math.max(delta, 0), MAX_GLIDE_STEP);
+}

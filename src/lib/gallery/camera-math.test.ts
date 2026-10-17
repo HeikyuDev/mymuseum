@@ -4,8 +4,11 @@ import {
   framingDistance,
   horizontalFov,
   pitchForFocus,
+  MAX_GLIDE_STEP,
+  advanceClock,
   glideAt,
   glideDuration,
+  planMove,
   restingPose,
 } from "./camera-math";
 
@@ -76,13 +79,15 @@ describe("glideAt", () => {
     expect(vel[0]).toBeCloseTo(18.75, 4);
   });
 
-  it("is deterministic for a given elapsed time, whatever the frame rate", () => {
-    const at = (steps: number) => {
-      let t = 0;
-      for (let i = 0; i < steps; i += 1) t += 0.7 / steps;
-      return glideAt(2, 0, 9, 1.2, t);
+  it("follows the same curve whatever the frame rate, because it is driven by elapsed time", () => {
+    const at = (fps: number, seconds: number) => {
+      let elapsed = 0;
+      for (let t = 0; t < seconds - 1e-9; t += 1 / fps) elapsed = advanceClock(elapsed, 1 / fps, false);
+      return glideAt(2, 0, 9, 1.2, elapsed);
     };
-    expect(at(10)).toBeCloseTo(at(100), 9);
+    expect(at(60, 0.6)).toBeCloseTo(at(20, 0.6), 6);
+    expect(at(60, 1.2)).toBe(9);
+    expect(at(10, 1.5)).toBe(9);
   });
 
   it("continues an interrupted glide without a velocity jump", () => {
@@ -105,5 +110,40 @@ describe("glideDuration", () => {
     expect(glideDuration(1, false)).toBeLessThan(glideDuration(30, false));
     expect(glideDuration(3.5, false)).toBeGreaterThanOrEqual(0.9);
     expect(glideDuration(500, false)).toBeLessThanOrEqual(1.7);
+  });
+});
+
+describe("advanceClock", () => {
+  it("caps a hitch and lets the first frame after a request only start the clock", () => {
+    expect(advanceClock(0.2, 0.3, false)).toBeCloseTo(0.2 + MAX_GLIDE_STEP, 9);
+    expect(advanceClock(0, 0.3, true)).toBe(0);
+    expect(advanceClock(0.5, -1, false)).toBe(0.5);
+  });
+});
+
+describe("planMove", () => {
+  const base = { first: false, stopChanged: false, releasing: false, zoomChanged: false, aspectChanged: false, distance: 4, introSeconds: 2.6, reducedMotion: false };
+  it("initialises on the first pose and follows a rebuilt target without moving", () => {
+    expect(planMove({ ...base, first: true })).toEqual({ kind: "init" });
+    expect(planMove(base)).toEqual({ kind: "follow" });
+  });
+  it("glides to a new stop and counts the arrival, with a duration that follows the distance", () => {
+    const near = planMove({ ...base, stopChanged: true, distance: 3 });
+    const far = planMove({ ...base, stopChanged: true, distance: 40 });
+    expect(near).toMatchObject({ kind: "glide", arrival: true });
+    expect(far.kind === "glide" && near.kind === "glide" && far.seconds > near.seconds).toBe(true);
+  });
+  it("plays the opening glide when the loading hold ends, even if the stop did not change", () => {
+    expect(planMove({ ...base, releasing: true, stopChanged: true })).toEqual({ kind: "glide", seconds: 2.6, arrival: true });
+  });
+  it("re-frames a zoom quickly without announcing an arrival", () => {
+    expect(planMove({ ...base, zoomChanged: true })).toEqual({ kind: "glide", seconds: 0.45, arrival: false });
+  });
+  it("snaps on a resize or rotation instead of starting a move", () => {
+    expect(planMove({ ...base, aspectChanged: true })).toEqual({ kind: "snap" });
+  });
+  it("cuts instead of gliding with reduced motion", () => {
+    expect(planMove({ ...base, stopChanged: true, reducedMotion: true })).toMatchObject({ kind: "glide", seconds: 0 });
+    expect(planMove({ ...base, releasing: true, reducedMotion: true })).toMatchObject({ seconds: 0 });
   });
 });

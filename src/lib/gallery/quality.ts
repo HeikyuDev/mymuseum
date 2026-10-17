@@ -319,3 +319,29 @@ export function governorStep(state: GovernorState, medianMs: number, lagShare: n
   if (!canDegrade) return { state: { ...state, windows, over: 0 }, action: "none" };
   return { state: { ...state, windows, over: 0, cooldown: COOLDOWN_WINDOWS }, action: "degrade" };
 }
+
+/** Frames slower than this are a stall (a texture upload, a tab switch), not the pace of the device. */
+export const GOVERNOR_MAX_SAMPLE_MS = 150;
+/** The first frames of a glide carry the work of starting it and are not representative. */
+export const GOVERNOR_GLIDE_SETTLE_MS = 160;
+/** After a tab switch, a resize or a rotation the browser needs a moment before frame times mean anything. */
+export const GOVERNOR_QUIET_MS = 2000;
+
+export type SampleContext = {
+  frameMs: number;
+  hidden: boolean;
+  now: number;
+  /** No samples before this time (set by visibility, resize and rotation events). */
+  quietUntil: number;
+  glideStartedAt: number;
+  /** Glides completed: the opening glide (warm-up, uploads, the curtain fade) never counts. */
+  glides: number;
+};
+
+/** Whether a frame of a glide may count toward the governor window. */
+export function shouldSampleFrame(c: SampleContext): boolean {
+  if (c.hidden || c.glides < 1) return false;
+  if (c.frameMs > GOVERNOR_MAX_SAMPLE_MS) return false;
+  if (c.now < c.quietUntil) return false;
+  return c.now - c.glideStartedAt >= GOVERNOR_GLIDE_SETTLE_MS;
+}

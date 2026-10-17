@@ -130,7 +130,7 @@ export function GalleryScene({
   useEffect(() => {
     callbacks.current = { onSelectArtwork, onPhotoSettled, onContextState };
   }, [onSelectArtwork, onPhotoSettled, onContextState]);
-  const motion = useMemo<MotionState>(() => ({ moving: false, restSince: 0, targetX: 0 }), []);
+  const motion = useMemo<MotionState>(() => ({ moving: false, restSince: 0, targetX: 0, glideStartedAt: 0, glides: 0 }), []);
 
   const value = useMemo<GalleryContextValue>(
     () => ({

@@ -1,12 +1,9 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { useRef } from "react";
-import { FRAME_BUDGET_MS, GOVERNOR_WINDOW, governorStep, initialGovernor, ladderStart, windowStats, type GovernorState, type QualityTier } from "@/lib/gallery/quality";
+import { useEffect, useRef } from "react";
+import { FRAME_BUDGET_MS, GOVERNOR_QUIET_MS, GOVERNOR_WINDOW, governorStep, initialGovernor, ladderStart, shouldSampleFrame, windowStats, type GovernorState, type QualityTier } from "@/lib/gallery/quality";
 import { useGallery } from "./context";
-
-/** Frames separated by more than this are idle gaps (the camera was at rest), not slow frames. */
-const IDLE_GAP_MS = 400;
 
 type Props = {
   tier: QualityTier;
@@ -23,13 +20,29 @@ type Props = {
  */
 export function PerfGovernor({ tier, enabled, canDegrade, onDegrade }: Props) {
   const { motion } = useGallery();
-  const acc = useRef({ frames: new Float32Array(GOVERNOR_WINDOW), count: 0, state: initialGovernor() as GovernorState });
+  const acc = useRef({ frames: new Float32Array(GOVERNOR_WINDOW), count: 0, quietUntil: 0, state: initialGovernor() as GovernorState });
+
+  // A background tab, a resize or a rotation makes frame times meaningless for a moment: drop the window.
+  useEffect(() => {
+    const quiet = () => {
+      acc.current.quietUntil = performance.now() + GOVERNOR_QUIET_MS;
+      acc.current.count = 0;
+    };
+    document.addEventListener("visibilitychange", quiet);
+    window.addEventListener("resize", quiet);
+    window.addEventListener("orientationchange", quiet);
+    return () => {
+      document.removeEventListener("visibilitychange", quiet);
+      window.removeEventListener("resize", quiet);
+      window.removeEventListener("orientationchange", quiet);
+    };
+  }, []);
 
   useFrame((_, delta) => {
     if (!enabled || !motion.moving) return;
     const ms = delta * 1000;
-    if (ms > IDLE_GAP_MS) return;
     const a = acc.current;
+    if (!shouldSampleFrame({ frameMs: ms, hidden: document.hidden, now: performance.now(), quietUntil: a.quietUntil, glideStartedAt: motion.glideStartedAt, glides: motion.glides })) return;
     a.frames[a.count] = ms;
     a.count += 1;
     if (a.count < GOVERNOR_WINDOW) return;
