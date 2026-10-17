@@ -10,6 +10,8 @@ export type DeviceProfile = {
   /** True when ?quality= forced the tier: the governor and the stored preference stay out of it. */
   forced: boolean;
   reducedMotion: boolean;
+  /** A phone or tablet class device (touch first or a narrow viewport): fill rate is its bottleneck. */
+  mobile: boolean;
 };
 
 let cached: DeviceProfile | null = null;
@@ -35,11 +37,12 @@ function detect(embedded: boolean): DeviceProfile {
   const forced = new URLSearchParams(window.location.search).get("quality");
   const override = forced === "low" || forced === "medium" || forced === "high" ? forced : null;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
   const tier =
     override ??
     detectTier({
       viewportWidth: window.innerWidth,
-      coarsePointer: window.matchMedia("(pointer: coarse)").matches,
+      coarsePointer,
       deviceMemory: nav.deviceMemory,
       hardwareConcurrency: nav.hardwareConcurrency,
       softwareRenderer: gl.software,
@@ -49,7 +52,7 @@ function detect(embedded: boolean): DeviceProfile {
       reducedData: nav.connection?.saveData === true,
       reducedMotion,
     });
-  return { webgl: gl.ok, tier, forced: override !== null, reducedMotion };
+  return { webgl: gl.ok, tier, forced: override !== null, reducedMotion, mobile: !embedded && (coarsePointer || window.innerWidth < 700) };
 }
 
 /** The tier this device would start on (used by exports to size their memory budget). */

@@ -11,7 +11,7 @@ export default function PerfOverlay() {
       const p = perfStore;
       if (!ref.current) return;
       ref.current.textContent = [
-        `tier     ${p.tier}${p.scale < 1 ? ` x${p.scale}` : ""}`,
+        `tier     ${p.tier}   level ${p.level}   dpr ${p.pixelRatio.toFixed(2)}`,
         `fps      ${p.fps.toFixed(0)}   frame ${p.frameMs.toFixed(1)} ms   cpu ${p.renderCpuMs.toFixed(1)} ms`,
         `calls    ${p.calls}   tris ${p.triangles}`,
         `tex      ${p.textures} (~${p.textureMB.toFixed(1)} MB)   geo ${p.geometries}   prog ${p.programs}`,

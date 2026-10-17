@@ -39,12 +39,14 @@ export type QualitySettings = {
   simpleFrames: boolean;
   /** Zones and artworks farther than this many meters from the camera are not drawn. */
   cullDistance: number;
+  /** Render resolution multiplier while the camera glides (restored at rest). 1 keeps full resolution. */
+  moveScale: number;
 };
 
 export const QUALITY: Record<QualityTier, QualitySettings> = {
   low: {
     tier: "low",
-    dpr: [0.75, 1],
+    dpr: [1, 1.25],
     antialias: false,
     shadows: false,
     shadowMapSize: 512,
@@ -60,10 +62,11 @@ export const QUALITY: Record<QualityTier, QualitySettings> = {
     anisotropy: 2,
     loadRadius: 2,
     maxLoads: 2,
-    props: false,
+    props: true,
     envIntensity: 0,
     simpleFrames: true,
     cullDistance: 16,
+    moveScale: 0.85,
   },
   medium: {
     tier: "medium",
@@ -87,6 +90,7 @@ export const QUALITY: Record<QualityTier, QualitySettings> = {
     envIntensity: 0.3,
     simpleFrames: false,
     cullDistance: 24,
+    moveScale: 0.85,
   },
   high: {
     tier: "high",
@@ -110,6 +114,7 @@ export const QUALITY: Record<QualityTier, QualitySettings> = {
     envIntensity: 0.3,
     simpleFrames: false,
     cullDistance: 32,
+    moveScale: 1,
   },
   export: {
     tier: "export",
@@ -133,6 +138,7 @@ export const QUALITY: Record<QualityTier, QualitySettings> = {
     envIntensity: 0.3,
     simpleFrames: false,
     cullDistance: 200,
+    moveScale: 1,
   },
 };
 
@@ -178,15 +184,37 @@ export function detectTier(device: DeviceInfo): QualityTier {
   return strong ? "high" : "medium";
 }
 
-/** A tier's settings with the pixel ratio scaled (the governor lowers it on the low tier). */
+/** A tier's settings with the pixel ratio scaled (the governor lowers it first). */
 export function scaledQuality(tier: QualityTier, scale: number): QualitySettings {
-  const base = QUALITY[tier];
+  return withScale(QUALITY[tier], scale);
+}
+
+function withScale(base: QualitySettings, scale: number): QualitySettings {
   if (scale >= 1) return base;
   const [min, max] = base.dpr;
   return { ...base, dpr: [Math.max(0.5, min * scale), Math.max(0.5, max * scale)] };
 }
 
-export type QualityPreference ="auto" | "high" | "low";
+/**
+ * Phone adjustments: no MSAA (the pixel ratio already hides most aliasing), a pixel ratio of at most 1.5,
+ * smaller shadow maps, no planar reflection and fewer lights. Fill rate is what phones run out of first.
+ */
+export function forMobile(base: QualitySettings): QualitySettings {
+  if (base.tier === "export") return base;
+  return {
+    ...base,
+    antialias: false,
+    dpr: [Math.min(base.dpr[0], 1), Math.min(base.dpr[1], 1.5)],
+    shadowMapSize: Math.min(base.shadowMapSize, 1024),
+    reflector: false,
+    spotCount: Math.min(base.spotCount, 2),
+    shadowLights: Math.min(base.shadowLights, 1),
+    photoTextureMax: Math.min(base.photoTextureMax, 1536),
+    moveScale: Math.min(base.moveScale, 0.75),
+  };
+}
+
+export type QualityPreference = "auto" | "high" | "low";
 
 export function parsePreference(value: unknown): QualityPreference {
   return value === "high" || value === "low" ? value : "auto";
@@ -197,53 +225,97 @@ export function tierForPreference(preference: QualityPreference, detected: Quali
   return preference === "auto" ? detected : preference;
 }
 
-const ORDER: QualityTier[] = ["low", "medium", "high"];
+// ---- graceful degradation ---------------------------------------------------------------------
 
-export function lowerTier(tier: QualityTier): QualityTier {
-  const index = ORDER.indexOf(tier);
-  return index <= 0 ? "low" : ORDER[index - 1];
+type Rung = {
+  /** Base tier of the rung (the baked low tier is the last resort). */
+  tier: "low" | "medium" | "high";
+  /** Resolution multiplier. */
+  scale: number;
+  /** No planar reflection and no shadows (the rendering features that cost the most per frame). */
+  lite?: boolean;
+};
+
+const rung = (tier: Rung["tier"], scale: number, lite = false): Rung => ({ tier, scale, lite });
+
+/**
+ * The order in which a device that cannot keep up gives things up: resolution first, then shadows and the
+ * reflection, and only then the baked low tier. Each device walks down from its starting tier.
+ */
+export const LADDERS: Record<"low" | "medium" | "high", readonly Rung[]> = {
+  high: [rung("high", 1), rung("high", 0.85), rung("high", 0.7), rung("high", 0.7, true), rung("low", 1), rung("low", 0.85), rung("low", 0.7)],
+  medium: [rung("medium", 1), rung("medium", 0.85), rung("medium", 0.7), rung("medium", 0.7, true), rung("low", 1), rung("low", 0.85), rung("low", 0.7)],
+  low: [rung("low", 1), rung("low", 0.85), rung("low", 0.7), rung("low", 0.6)],
+};
+
+export function ladderStart(tier: QualityTier): "low" | "medium" | "high" {
+  return tier === "low" || tier === "medium" ? tier : "high";
+}
+
+export function maxLevel(start: QualityTier): number {
+  return LADDERS[ladderStart(start)].length - 1;
+}
+
+/** The settings of a device that started on `start` and has been degraded `level` rungs. */
+export function resolveQuality(start: QualityTier, level: number, mobile: boolean): QualitySettings {
+  const ladder = LADDERS[ladderStart(start)];
+  const step = ladder[Math.min(Math.max(level, 0), ladder.length - 1)];
+  let base = QUALITY[step.tier];
+  if (mobile) base = forMobile(base);
+  if (step.lite) base = { ...base, reflector: false, shadows: false, shadowLights: 0 };
+  return withScale(base, step.scale);
+}
+
+/** Tier name of a rung (used to key the canvas: a different tier is a different scene). */
+export function tierAt(start: QualityTier, level: number): QualityTier {
+  const ladder = LADDERS[ladderStart(start)];
+  return ladder[Math.min(Math.max(level, 0), ladder.length - 1)].tier;
 }
 
 // ---- runtime governor ---------------------------------------------------------------------
 
-/** Frame time budgets in ms: ~40 fps for medium and high, ~28 fps for low. */
-export const FRAME_BUDGET_MS: Record<"low" | "medium" | "high", number> = { high: 25, medium: 25, low: 36 };
+/** Frame time budgets in ms: ~40 fps for medium and high, ~30 fps for low. */
+export const FRAME_BUDGET_MS: Record<"low" | "medium" | "high", number> = { high: 25, medium: 25, low: 33 };
 /** Frames per measurement window. Frames only exist while the camera moves (frameloop demand). */
-export const GOVERNOR_WINDOW = 40;
+export const GOVERNOR_WINDOW = 30;
 const WARMUP_WINDOWS = 2;
 const OVER_WINDOWS_TO_ACT = 2;
 const COOLDOWN_WINDOWS = 3;
-/** Resolution multipliers the governor walks through on the low tier (after it can no longer lower the tier). */
-export const LOW_SCALES = [1, 0.75, 0.6] as const;
+/** A window also counts as slow when this share of its frames took longer than 1.5 budgets. */
+const LAG_SHARE = 0.3;
 
 export type GovernorState = {
   windows: number;
   over: number;
   cooldown: number;
-  /** Index into LOW_SCALES. */
-  scaleStep: number;
 };
 
-export const initialGovernor = (): GovernorState => ({ windows: 0, over: 0, cooldown: 0, scaleStep: 0 });
+export const initialGovernor = (): GovernorState => ({ windows: 0, over: 0, cooldown: 0 });
 
-export type GovernorAction = "none" | "tier-down" | "scale-down";
+export type GovernorAction = "none" | "degrade";
+
+/** Median of a window of frame times (ms). The median ignores the one-off hitch of a texture upload. */
+export function windowStats(frames: readonly number[], budgetMs: number): { median: number; lagShare: number } {
+  if (frames.length === 0) return { median: 0, lagShare: 0 };
+  const sorted = [...frames].sort((a, b) => a - b);
+  const lag = frames.filter((ms) => ms > budgetMs * 1.5).length / frames.length;
+  return { median: sorted[Math.floor(sorted.length / 2)], lagShare: lag };
+}
 
 /**
- * One decision per measurement window (the average frame time of GOVERNOR_WINDOW frames).
- * It only ever degrades: two consecutive over-budget windows are needed, and after acting it
- * waits a few windows so shader recompiles and texture uploads cannot trigger a second step.
- * Because it never upgrades, the quality cannot flap.
+ * One decision per measurement window. It only ever degrades one rung: two consecutive slow windows
+ * are needed (median over budget, or a third of the frames far over it), and after acting it waits a few
+ * windows so shader recompiles and texture uploads cannot trigger a second step. Because it never upgrades,
+ * the quality cannot flap.
  */
-export function governorStep(state: GovernorState, avgFrameMs: number, tier: QualityTier): { state: GovernorState; action: GovernorAction } {
-  const key = tier === "low" || tier === "medium" || tier === "high" ? tier : "high";
+export function governorStep(state: GovernorState, medianMs: number, lagShare: number, tier: QualityTier, canDegrade = true): { state: GovernorState; action: GovernorAction } {
+  const budget = FRAME_BUDGET_MS[ladderStart(tier)];
   const windows = state.windows + 1;
   if (windows <= WARMUP_WINDOWS) return { state: { ...state, windows }, action: "none" };
   if (state.cooldown > 0) return { state: { ...state, windows, cooldown: state.cooldown - 1, over: 0 }, action: "none" };
-  const over = avgFrameMs > FRAME_BUDGET_MS[key] ? state.over + 1 : 0;
+  const slow = medianMs > budget || lagShare > LAG_SHARE;
+  const over = slow ? state.over + 1 : 0;
   if (over < OVER_WINDOWS_TO_ACT) return { state: { ...state, windows, over }, action: "none" };
-  if (key !== "low") return { state: { ...state, windows, over: 0, cooldown: COOLDOWN_WINDOWS }, action: "tier-down" };
-  if (state.scaleStep < LOW_SCALES.length - 1) {
-    return { state: { ...state, windows, over: 0, cooldown: COOLDOWN_WINDOWS, scaleStep: state.scaleStep + 1 }, action: "scale-down" };
-  }
-  return { state: { ...state, windows, over: 0 }, action: "none" };
+  if (!canDegrade) return { state: { ...state, windows, over: 0 }, action: "none" };
+  return { state: { ...state, windows, over: 0, cooldown: COOLDOWN_WINDOWS }, action: "degrade" };
 }

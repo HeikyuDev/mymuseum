@@ -3,8 +3,10 @@
 
 export type PerfSnapshot = {
   tier: string;
-  /** Resolution multiplier applied by the governor on the low tier. */
-  scale: number;
+  /** Rung of the degradation ladder the governor has reached (0 = the tier as detected). */
+  level: number;
+  /** Drawing-buffer pixel ratio right now (lower while the camera glides). */
+  pixelRatio: number;
   fps: number;
   frameMs: number;
   /** CPU time spent inside gl.render per frame. */
@@ -24,7 +26,8 @@ export type PerfSnapshot = {
 
 export const perfStore: PerfSnapshot = {
   tier: "",
-  scale: 1,
+  level: 0,
+  pixelRatio: 1,
   fps: 0,
   frameMs: 0,
   renderCpuMs: 0,

@@ -2,38 +2,42 @@
 
 import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
-import { GOVERNOR_WINDOW, governorStep, initialGovernor, type GovernorAction, type GovernorState, type QualityTier } from "@/lib/gallery/quality";
+import { FRAME_BUDGET_MS, GOVERNOR_WINDOW, governorStep, initialGovernor, ladderStart, windowStats, type GovernorState, type QualityTier } from "@/lib/gallery/quality";
+import { useGallery } from "./context";
 
 /** Frames separated by more than this are idle gaps (the camera was at rest), not slow frames. */
 const IDLE_GAP_MS = 400;
 
 type Props = {
   tier: QualityTier;
-  scaleStep: number;
   enabled: boolean;
-  onAction: (action: GovernorAction) => void;
+  /** False once the ladder is exhausted: nothing is left to give up. */
+  canDegrade: boolean;
+  onDegrade: () => void;
 };
 
 /**
- * Measures the real frame time while the camera moves and asks for a cheaper setting when it
- * stays over budget. It only degrades (see `governorStep`), so the quality never flaps.
+ * Measures the real frame time while the camera glides and asks for the next, cheaper rung of the
+ * quality ladder when a whole window stays over budget. It only degrades (see `governorStep`), so the
+ * quality never flaps. It keeps its numbers in a preallocated buffer and never causes a re-render by itself.
  */
-export function PerfGovernor({ tier, scaleStep, enabled, onAction }: Props) {
-  const acc = useRef({ sum: 0, count: 0, state: { ...initialGovernor(), scaleStep } as GovernorState });
+export function PerfGovernor({ tier, enabled, canDegrade, onDegrade }: Props) {
+  const { motion } = useGallery();
+  const acc = useRef({ frames: new Float32Array(GOVERNOR_WINDOW), count: 0, state: initialGovernor() as GovernorState });
 
   useFrame((_, delta) => {
-    if (!enabled) return;
+    if (!enabled || !motion.moving) return;
     const ms = delta * 1000;
     if (ms > IDLE_GAP_MS) return;
     const a = acc.current;
-    a.sum += ms;
+    a.frames[a.count] = ms;
     a.count += 1;
     if (a.count < GOVERNOR_WINDOW) return;
-    const step = governorStep(a.state, a.sum / a.count, tier);
-    a.state = step.state;
-    a.sum = 0;
     a.count = 0;
-    if (step.action !== "none") onAction(step.action);
+    const { median, lagShare } = windowStats(Array.from(a.frames), FRAME_BUDGET_MS[ladderStart(tier)]);
+    const step = governorStep(a.state, median, lagShare, tier, canDegrade);
+    a.state = step.state;
+    if (step.action === "degrade") onDegrade();
   });
 
   return null;

@@ -7,14 +7,14 @@ import type { Material, Mesh, Texture } from "three";
 import { perfStore } from "./perf-store";
 
 /** Diagnostics only (?debug=perf): samples renderer.info and CPU render time. Loaded lazily. */
-export default function PerfProbe({ tier, scale }: { tier: string; scale: number }) {
+export default function PerfProbe({ tier, level }: { tier: string; level: number }) {
   const gl = useThree((state) => state.gl);
   const scene = useThree((state) => state.scene);
   const timing = useRef({ cpu: 0, frames: 0, last: 0, windowStart: 0, lastMem: 0 });
 
   useEffect(() => {
     perfStore.tier = tier;
-    perfStore.scale = scale;
+    perfStore.level = level;
     (window as unknown as { __galleryPerf?: typeof perfStore }).__galleryPerf = perfStore;
     const original = gl.render.bind(gl);
     gl.render = (target, camera) => {
@@ -25,7 +25,7 @@ export default function PerfProbe({ tier, scale }: { tier: string; scale: number
     return () => {
       gl.render = original;
     };
-  }, [gl, tier, scale]);
+  }, [gl, tier, level]);
 
   useFrame(() => {
     const t = timing.current;
@@ -40,6 +40,7 @@ export default function PerfProbe({ tier, scale }: { tier: string; scale: number
       t.frames = 0;
       t.cpu = 0;
       t.windowStart = now;
+      perfStore.pixelRatio = gl.getPixelRatio();
       perfStore.calls = gl.info.render.calls;
       perfStore.triangles = gl.info.render.triangles;
       perfStore.textures = gl.info.memory.textures;
