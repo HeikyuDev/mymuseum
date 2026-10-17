@@ -4,6 +4,8 @@ import { useEffect, useMemo } from "react";
 import { BoxGeometry, Color, ExtrudeGeometry, Float32BufferAttribute, Path, PlaneGeometry, Shape, ShapeGeometry, type BufferGeometry } from "three";
 import { PORTAL_HEIGHT, PORTAL_WIDTH, ROOM_DEPTH, WALL_HEIGHT } from "@/lib/gallery/layout";
 import { isDarkColor, type ZoneLook } from "@/lib/gallery/scene-look";
+import { darkness } from "@/lib/gallery/baked-light";
+import { bakeWallPiece } from "./baked-surfaces";
 import { useGallery } from "./context";
 import { metersToTiles } from "./geometry";
 import { makeInscriptionTexture } from "./text-textures";
@@ -84,7 +86,7 @@ export function Portal({ x, title, look, fromLook }: Props) {
 
   const geometries = useMemo(
     () => ({
-      wall: resources.geometry(`portal-wall:${wallMaps.tileMeters}`, () => {
+      wall: resources.geometry(`portal-wall:${quality.baked ? `b${x}:${look.lighting.glow}:` : ""}${wallMaps.tileMeters}`, () => {
         const wall = new Shape();
         wall.moveTo(-PORTAL_SEGMENT_WIDTH / 2, 0);
         wall.lineTo(PORTAL_SEGMENT_WIDTH / 2, 0);
@@ -99,7 +101,8 @@ export function Portal({ x, title, look, fromLook }: Props) {
         const uv = geometry.getAttribute("uv");
         for (let i = 0; i < uv.count; i += 1) uv.setX(i, uv.getX(i) + PORTAL_SEGMENT_WIDTH / 2);
         metersToTiles(geometry, wallMaps.tileMeters);
-        return geometry;
+        // The baked tier subdivides the piece so it can carry the same vertical light gradient as the walls beside it.
+        return quality.baked ? bakeWallPiece(geometry, x, WALL_HEIGHT, { spots: [], glow: look.lighting.glow, spot: new Color(look.lighting.spot), lift: darkness(look.wallColor) }) : geometry;
       }),
       stone: resources.geometry("portal-stone", () => new ExtrudeGeometry(band(PORTAL_WIDTH / 2 + SURROUND, PORTAL_WIDTH / 2), { depth: 0.2, bevelEnabled: true, bevelThickness: 0.018, bevelSize: 0.018, bevelSegments: 2, curveSegments: 28 })),
       line: resources.geometry("portal-line", () => new ExtrudeGeometry(band(PORTAL_WIDTH / 2 + 0.05, PORTAL_WIDTH / 2), { depth: 0.235, bevelEnabled: false, curveSegments: 28 })),
@@ -110,12 +113,12 @@ export function Portal({ x, title, look, fromLook }: Props) {
       signRule: resources.geometry("portal-sign-rule", () => new BoxGeometry(3.4, 0.014, 0.02)),
       beam: resources.geometry("portal-beam", () => new BoxGeometry(0.28, 0.28, ROOM_DEPTH)),
     }),
-    [resources, wallMaps.tileMeters, fromLook.wallColor, look.wallColor],
+    [resources, wallMaps.tileMeters, fromLook.wallColor, look.wallColor, quality.baked, x, look.lighting.glow, look.lighting.spot],
   );
 
   const stoneColor = dark ? "#c4bcae" : "#e4e0d6";
   const accentColor = look.accent ?? accent;
-  const wallMaterial = wallMaterialFor(resources, look, wallMaps, mood.tint);
+  const wallMaterial = wallMaterialFor(resources, look, wallMaps, mood.tint, quality.baked);
   const stoneMaterial = resources.surface(`stone:${stoneColor}`, { color: stoneColor, roughness: 0.75, envMapIntensity: 0.3 });
   const lineMaterial = resources.surface(`accent-line:${accentColor}`, { color: accentColor, metalness: 0.6, roughness: 0.5, envMapIntensity: 0.6 });
   const vestibuleMaterial = resources.surface("vestibule", { color: "#ffffff", roughness: 0.95, vertexColors: true });

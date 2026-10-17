@@ -238,3 +238,108 @@ export function makeFloorSheenTexture(): CanvasTexture {
   texture.colorSpace = SRGBColorSpace;
   return texture;
 }
+
+export type WallLetteringOptions = {
+  /** The museum name: set in capitals with wide tracking. */
+  title: string;
+  /** A small line under a hairline (the first hall's name). */
+  subtitle?: string;
+  /** Width / height of the canvas. */
+  aspect: number;
+  family: string;
+  color: string;
+  /** Soft relief: a light edge on the upper left and a dark edge on the lower right. */
+  light: string;
+  dark: string;
+  pixelHeight?: number;
+};
+
+function trackedWidth(ctx: CanvasRenderingContext2D, text: string, tracking: number): number {
+  let width = 0;
+  for (const char of text) width += ctx.measureText(char).width + tracking;
+  return width - tracking;
+}
+
+function drawTracked(ctx: CanvasRenderingContext2D, text: string, centerX: number, y: number, tracking: number) {
+  let x = centerX - trackedWidth(ctx, text, tracking) / 2;
+  ctx.textAlign = "left";
+  for (const char of text) {
+    ctx.fillText(char, x, y);
+    x += ctx.measureText(char).width + tracking;
+  }
+}
+
+/** Large, minimal sans-serif lettering for the feature wall: generous tracking and a subtle relief. */
+export function makeWallLetteringTexture({ title, subtitle, aspect, family, color, light, dark, pixelHeight = 256 }: WallLetteringOptions): CanvasTexture {
+  const h = pixelHeight;
+  const w = Math.round(h * aspect);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, w, h);
+  ctx.textBaseline = "middle";
+
+  const text = title.trim().toUpperCase();
+  const hasSubtitle = Boolean(subtitle);
+  const maxWidth = w * 0.94;
+  // Shrink until the whole name fits on one line, then fall back to the smallest readable size.
+  let size = h * (hasSubtitle ? 0.42 : 0.5);
+  const minSize = h * 0.16;
+  let tracking = size * 0.34;
+  for (; size > minSize; size -= 2) {
+    tracking = size * 0.34;
+    ctx.font = `500 ${size}px ${family}`;
+    if (trackedWidth(ctx, text, tracking) <= maxWidth) break;
+  }
+  ctx.font = `500 ${size}px ${family}`;
+  const baseline = hasSubtitle ? h * 0.36 : h * 0.5;
+  const relief = Math.max(1, size * 0.028);
+  const passes: [string, number, number][] = [
+    [dark, relief * 1.4, relief * 1.6],
+    [light, -relief * 0.8, -relief * 0.9],
+    [color, 0, 0],
+  ];
+  for (const [fill, dx, dy] of passes) {
+    ctx.fillStyle = fill;
+    drawTracked(ctx, text, w / 2 + dx, baseline + dy, tracking);
+  }
+
+  if (subtitle) {
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = Math.max(1, h * 0.008);
+    ctx.beginPath();
+    ctx.moveTo(w * 0.36, h * 0.66);
+    ctx.lineTo(w * 0.64, h * 0.66);
+    ctx.stroke();
+    const subSize = h * 0.115;
+    ctx.font = `500 ${subSize}px ${family}`;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.78;
+    drawTracked(ctx, subtitle.toUpperCase(), w / 2, h * 0.8, subSize * 0.5);
+    ctx.globalAlpha = 1;
+  }
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}
+
+/** Vertical wash for the LED cove: bright at the ceiling line, gone a meter below (additive). */
+export function makeLedWashTexture(): CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 4;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createLinearGradient(0, 0, 0, 128);
+  gradient.addColorStop(0, "rgba(255,244,222,0.95)");
+  gradient.addColorStop(0.18, "rgba(255,244,222,0.42)");
+  gradient.addColorStop(0.55, "rgba(255,244,222,0.12)");
+  gradient.addColorStop(1, "rgba(255,244,222,0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 4, 128);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}

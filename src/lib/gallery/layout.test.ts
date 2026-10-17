@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { artworkSize, photoSize } from "./frame-specs";
 import {
+  ENTRANCE_LETTERING_WIDTH,
   EYE_CENTER,
   PORTAL_WIDTH,
   buildLayout,
@@ -129,6 +130,24 @@ describe("buildLayout", () => {
     expect(layout.stops[0].kind).toBe("hall");
     expect(layout.stops[layout.firstArtworkStop].kind).toBe("artwork");
     expect(hallStopIndex(layout, 1)).toBe(layout.stops.findIndex((s) => s.id === "hall:h2"));
+  });
+
+  it("starts in front of a solid entrance wall: the first stop frames it, no doorway is needed", () => {
+    const { entrance } = layout;
+    expect(entrance.start).toBe(layout.minX);
+    expect(entrance.centerX).toBe((entrance.start + entrance.end) / 2);
+    expect(layout.stops[0]).toMatchObject({ kind: "hall", zoneIndex: 0, x: entrance.centerX });
+    // The lettered area fits inside the wall and ends well before the first frame.
+    expect(entrance.end - entrance.start).toBeGreaterThan(ENTRANCE_LETTERING_WIDTH + 1);
+    const first = layout.artworks[0];
+    expect(entrance.end).toBeLessThan(first.x - first.outerW / 2);
+    expect(entrance.centerX).toBeLessThan(first.x);
+    expect(layout.stops[layout.firstArtworkStop].x).toBeGreaterThan(entrance.end);
+  });
+
+  it("keeps the doorways between halls where they were", () => {
+    expect(layout.stops.filter((stop) => stop.kind === "hall")).toHaveLength(layout.zones.length);
+    expect(layout.stops.find((stop) => stop.id === "hall:h2")?.x).toBe(layout.zones[1].portalX);
   });
 
   it("puts the plaque below the frame, inside the wall", () => {

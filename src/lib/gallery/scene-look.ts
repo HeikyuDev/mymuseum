@@ -190,3 +190,42 @@ export function isDarkColor(hex: string): boolean {
   const n = Number.parseInt(hex.slice(1), 16);
   return 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255) < 118;
 }
+
+function hexToHsl(hex: string): [number, number, number] {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const sat = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h /= 6;
+  return [h, sat, l];
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const hue = (p: number, q: number, t: number) => {
+    const u = t < 0 ? t + 1 : t > 1 ? t - 1 : t;
+    if (u < 1 / 6) return p + (q - p) * 6 * u;
+    if (u < 1 / 2) return q;
+    if (u < 2 / 3) return p + (q - p) * (2 / 3 - u) * 6;
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const channel = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, "0");
+  return s === 0 ? `#${channel(l)}${channel(l)}${channel(l)}` : `#${channel(hue(p, q, h + 1 / 3))}${channel(hue(p, q, h))}${channel(hue(p, q, h - 1 / 3))}`;
+}
+
+/**
+ * The tone of the fine microcement of the entrance and end walls: the first hall's wall color with most of
+ * its saturation taken out, so brick, velvet or wood halls get a quiet neutral that still belongs to them.
+ */
+export function microcementColor(wallColor: string): string {
+  const [h, s, l] = hexToHsl(wallColor);
+  return hslToHex(h, Math.min(s, 0.12), Math.min(0.86, Math.max(0.2, l < 0.45 ? l * 0.9 + 0.08 : l)));
+}

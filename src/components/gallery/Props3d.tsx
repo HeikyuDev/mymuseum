@@ -14,7 +14,7 @@ import {
   Vector3,
   type BufferGeometry,
 } from "three";
-import { PORTAL_WIDTH, type MuseumLayout } from "@/lib/gallery/layout";
+import { ENTRANCE_LETTERING_WIDTH, PORTAL_WIDTH, type MuseumLayout } from "@/lib/gallery/layout";
 import type { ZoneLook } from "@/lib/gallery/scene-look";
 import { useGallery } from "./context";
 import { colored, mergeAll } from "./resources";
@@ -30,6 +30,11 @@ export function Props3d({ zoneIndex, look, layout }: Props) {
   if (!quality.props || look.decor.length === 0) return null;
   const artworks = layout.artworks.filter((a) => a.zoneIndex === zoneIndex);
   const zone = layout.zones[zoneIndex];
+  // Plants flank the doorway of a hall; the first hall has none, so they stand either side of the lettered entrance wall.
+  const plantXs =
+    zoneIndex === 0
+      ? [layout.entrance.centerX - ENTRANCE_LETTERING_WIDTH / 2 - 1.3, layout.entrance.centerX + ENTRANCE_LETTERING_WIDTH / 2 + 1.3]
+      : [zone.portalX - PORTAL_WIDTH / 2 - 0.7, zone.portalX + PORTAL_WIDTH / 2 + 0.7];
   return (
     <group>
       {look.decor.includes("rope_barriers") ? <RopeLine artworks={artworks} /> : null}
@@ -40,8 +45,8 @@ export function Props3d({ zoneIndex, look, layout }: Props) {
         : null}
       {look.decor.includes("plants") ? (
         <>
-          <Plant x={zone.portalX - PORTAL_WIDTH / 2 - 0.7} scale={0.95} variant={0} />
-          <Plant x={zone.portalX + PORTAL_WIDTH / 2 + 0.7} scale={0.85} variant={1} />
+          <Plant x={plantXs[0]} scale={0.95} variant={0} />
+          <Plant x={plantXs[1]} scale={0.85} variant={1} />
         </>
       ) : null}
     </group>

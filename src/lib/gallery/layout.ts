@@ -10,10 +10,12 @@ export const WALL_HEIGHT = 3.9;
 export const ROOM_DEPTH = 8;
 export const PORTAL_WIDTH = 3.6;
 export const PORTAL_HEIGHT = 2.85;
-export const LOBBY_LENGTH = 7; // walking room before the first portal
+export const LOBBY_LENGTH = 7; // entrance wall: from the museum's west end to the first hall's origin
 const START_PAD = 1.5; // portal edge -> first artwork edge
 const END_PAD = 1.5; // last artwork edge -> next portal edge
 const END_CAP = 2.2; // last artwork edge -> closing wall of the museum
+/** Width of the lettered area of the entrance wall (a phone sees about 3 m of wall at the distance the camera can reach). */
+export const ENTRANCE_LETTERING_WIDTH = 2.6;
 const PLAQUE_GAP = 0.2;
 const PLAQUE_HEIGHT = 0.21;
 
@@ -64,6 +66,9 @@ export type CameraStop =
   | { id: string; kind: "hall"; zoneIndex: number; x: number; targetW: number; targetH: number; focusY: number }
   | { id: string; kind: "artwork"; zoneIndex: number; x: number; artworkIndex: number; targetW: number; targetH: number; focusY: number };
 
+/** The solid wall the visit starts in front of (there is no door: the first hall simply begins). */
+export type EntranceWall = { start: number; end: number; centerX: number };
+
 export type MuseumLayout = {
   zones: ZoneSpan[];
   artworks: ArtworkPlacement[];
@@ -71,6 +76,8 @@ export type MuseumLayout = {
   /** Left and right ends of the walkable gallery. */
   minX: number;
   maxX: number;
+  /** The wall in front of which the opening glide starts. */
+  entrance: EntranceWall;
   /** Index in `stops` where a visit starts (first artwork, falling back to the first stop). */
   firstArtworkStop: number;
 };
@@ -93,21 +100,30 @@ export function buildLayout(input: readonly LayoutZoneInput[]): MuseumLayout {
   const stops: CameraStop[] = [];
 
   let portalX = 0;
+  let entrance: EntranceWall = { start: -LOBBY_LENGTH, end: PORTAL_WIDTH / 2, centerX: (PORTAL_WIDTH / 2 - LOBBY_LENGTH) / 2 };
   zonesWithArt.forEach((zone, zoneIndex) => {
     if (zoneIndex > 0) {
       const last = artworks[artworks.length - 1];
       portalX = last.x + last.outerW / 2 + END_PAD + PORTAL_WIDTH / 2;
     }
 
-    stops.push({
-      id: `hall:${zone.id}`,
-      kind: "hall",
-      zoneIndex,
-      x: portalX,
-      targetW: PORTAL_WIDTH + 1.4,
-      targetH: PORTAL_HEIGHT + 0.9,
-      focusY: (PORTAL_HEIGHT + 0.9) / 2 + 0.35,
-    });
+    if (zoneIndex === 0) {
+      // The first hall has no doorway: its "entrance stop" frames the lettered wall at the start of the museum.
+      const start = portalX - LOBBY_LENGTH;
+      const end = portalX + PORTAL_WIDTH / 2;
+      entrance = { start, end, centerX: (start + end) / 2 };
+      stops.push({ id: `hall:${zone.id}`, kind: "hall", zoneIndex, x: entrance.centerX, targetW: ENTRANCE_LETTERING_WIDTH + 0.8, targetH: 2.4, focusY: 2.05 });
+    } else {
+      stops.push({
+        id: `hall:${zone.id}`,
+        kind: "hall",
+        zoneIndex,
+        x: portalX,
+        targetW: PORTAL_WIDTH + 1.4,
+        targetH: PORTAL_HEIGHT + 0.9,
+        focusY: (PORTAL_HEIGHT + 0.9) / 2 + 0.35,
+      });
+    }
 
     let cursor = portalX + PORTAL_WIDTH / 2 + START_PAD;
     let previousOuterW = 0;
@@ -171,7 +187,7 @@ export function buildLayout(input: readonly LayoutZoneInput[]): MuseumLayout {
     0,
     stops.findIndex((stop) => stop.kind === "artwork"),
   );
-  return { zones, artworks, stops, minX: zones[0]?.start ?? 0, maxX, firstArtworkStop };
+  return { zones, artworks, stops, minX: zones[0]?.start ?? 0, maxX, entrance, firstArtworkStop };
 }
 
 /** Index of the stop closest to `x` (used to re-sync the UI after a click on the wall). */
