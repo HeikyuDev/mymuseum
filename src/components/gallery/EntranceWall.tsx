@@ -5,11 +5,11 @@ import { BoxGeometry, PlaneGeometry } from "three";
 import { ENTRANCE_LETTERING_WIDTH, WALL_HEIGHT } from "@/lib/gallery/layout";
 import { isDarkColor, microcementColor } from "@/lib/gallery/scene-look";
 import { zoneTitle, useGallery } from "./context";
-import { makeWallLetteringTexture } from "./text-textures";
+import { makeWallLettering } from "./lettering";
 
 /** Ceiling line of the cove: the LED strip sits in a shallow recess just under the crown. */
 const COVE_Y = WALL_HEIGHT - 0.13;
-const LETTERING_ASPECT = 2.6 / 1.1;
+export const LETTERING_ASPECT = 2.6 / 1.1;
 
 /** The tone of the microcement of the entrance and end walls for a hall look. */
 export function useMicrocement(wallColor: string): { color: string; dark: boolean } {
@@ -53,20 +53,7 @@ export function EntranceWall() {
   const { color, dark } = useMicrocement(looks[0].wallColor);
   const hallName = zones[0] ? zoneTitle(zones[0], otherLabel) : "";
 
-  const texture = useMemo(
-    () =>
-      makeWallLetteringTexture({
-        title: museumTitle,
-        subtitle: hallName,
-        aspect: LETTERING_ASPECT,
-        family: fonts.body,
-        color: dark ? "#efe7d8" : "#2b2825",
-        light: dark ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.85)",
-        dark: dark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.22)",
-        pixelHeight: 256,
-      }),
-    [museumTitle, hallName, fonts.body, dark],
-  );
+  const texture = useMemo(() => makeWallLettering({ title: museumTitle, subtitle: hallName, family: fonts.body, dark, aspect: LETTERING_ASPECT }), [museumTitle, hallName, fonts.body, dark]);
   useEffect(() => () => texture.dispose(), [texture]);
 
   const { resources } = useGallery();

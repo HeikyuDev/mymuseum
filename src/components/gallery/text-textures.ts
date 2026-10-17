@@ -1,6 +1,6 @@
 import { CanvasTexture, SRGBColorSpace } from "three";
 
-// Engraved lettering drawn on canvases: museum placards and portal inscriptions.
+// Engraved lettering drawn on canvases: museum placards and inscriptions.
 
 export type TextToneName = "ivory" | "ink" | "stone";
 
@@ -11,7 +11,7 @@ const TONES: Record<TextToneName, Ink> = {
   ivory: { face: "#f3efe6", border: "rgba(120,98,52,0.55)", text: "#2a2620", shadow: "rgba(255,255,255,0.9)", highlight: "rgba(0,0,0,0.25)" },
   // black plaque, gold lettering (for dark walls)
   ink: { face: "#16140f", border: "rgba(201,162,39,0.7)", text: "#d9bd6a", shadow: "rgba(0,0,0,0.8)", highlight: "rgba(255,230,160,0.25)" },
-  // transparent stone inscription (portals)
+  // transparent stone inscription (inscriptions)
   stone: { face: "rgba(0,0,0,0)", border: "rgba(0,0,0,0)", text: "#4a4338", shadow: "rgba(255,255,255,0.65)", highlight: "rgba(0,0,0,0.3)" },
 };
 
@@ -103,7 +103,7 @@ export type InscriptionOptions = {
   pixelHeight?: number;
 };
 
-/** Large engraved lettering on a transparent canvas (portal heads, museum title). */
+/** Large engraved lettering on a transparent canvas (museum title). */
 export function makeInscriptionTexture({ text, eyebrow, aspect, family, bodyFamily, color, shadow, pixelHeight = 256 }: InscriptionOptions): CanvasTexture {
   const h = pixelHeight;
   const w = Math.round(h * aspect);
@@ -283,14 +283,16 @@ export function makeWallLetteringTexture({ title, subtitle, aspect, family, colo
   const text = title.trim().toUpperCase();
   const hasSubtitle = Boolean(subtitle);
   const maxWidth = w * 0.94;
-  // Shrink until the whole name fits on one line, then fall back to the smallest readable size.
+  // Shrink until the whole name fits on one line: first by tightening the tracking, then by lowering the size.
   let size = h * (hasSubtitle ? 0.42 : 0.5);
-  const minSize = h * 0.16;
+  const minSize = h * 0.1;
   let tracking = size * 0.34;
-  for (; size > minSize; size -= 2) {
-    tracking = size * 0.34;
-    ctx.font = `500 ${size}px ${family}`;
-    if (trackedWidth(ctx, text, tracking) <= maxWidth) break;
+  search: for (; size > minSize; size -= 2) {
+    for (const factor of [0.34, 0.22, 0.12]) {
+      tracking = size * factor;
+      ctx.font = `500 ${size}px ${family}`;
+      if (trackedWidth(ctx, text, tracking) <= maxWidth) break search;
+    }
   }
   ctx.font = `500 ${size}px ${family}`;
   const baseline = hasSubtitle ? h * 0.36 : h * 0.5;

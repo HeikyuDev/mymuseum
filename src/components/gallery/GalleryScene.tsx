@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useMemo, useRef, type ReactNode } from "react";
-import { buildLayout, type MuseumLayout } from "@/lib/gallery/layout";
+import { DIVIDER_WIDTH, buildLayout, type MuseumLayout } from "@/lib/gallery/layout";
 import { zoneLook, sceneMood, isDarkColor, type ZoneLook } from "@/lib/gallery/scene-look";
 import { toLayoutZones, galleryZones, type GalleryZone } from "@/lib/gallery/zones";
 import type { QualitySettings } from "@/lib/gallery/quality";
@@ -13,11 +13,11 @@ import { CameraRail, type FixedCamera } from "./CameraRail";
 import { CeilingTrack } from "./CeilingTrack";
 import { Culler } from "./Culler";
 import { EntranceWall } from "./EntranceWall";
-import { FocusStore, GalleryProvider, zoneTitle, useGallery, type GalleryContextValue, type MotionState, type SceneCallbacks } from "./context";
+import { FocusStore, GalleryProvider, useGallery, type GalleryContextValue, type MotionState, type SceneCallbacks } from "./context";
 import { Lighting } from "./Lighting";
 import { ContextGuard, MotionResolution, TextureUploader } from "./MotionDriver";
 import { PhotoStore } from "./photo-store";
-import { Portal, PORTAL_SEGMENT_WIDTH } from "./Portal";
+import { Divider } from "./Divider";
 import { Resources } from "./resources";
 import { SurfaceCache } from "./surface-cache";
 import { makeEdgeShadeTexture, makeFloorSheenTexture, makeLedWashTexture, makePlaceholderTexture, makeSoftShadowTexture, makeWallGlowTexture } from "./text-textures";
@@ -73,7 +73,7 @@ export type GallerySceneProps = {
   extras?: ReactNode;
 };
 
-/** Everything inside the canvas: lights, camera rail, zones, portals and artworks. */
+/** Everything inside the canvas: lights, camera rail, zones, dividers and artworks. */
 export function GalleryScene({
   model,
   museumTitle,
@@ -119,7 +119,7 @@ export function GalleryScene({
   useEffect(() => () => placeholderPhoto.dispose(), [placeholderPhoto]);
 
   // The photo store, the focus and the callbacks live outside React's render cycle: moving the camera to
-  // another stop must not re-render the zones, portals and artworks (that is a burst of main-thread work
+  // another stop must not re-render the zones, dividers and artworks (that is a burst of main-thread work
   // exactly when the glide starts).
   const photos = useMemo(() => new PhotoStore(!snapshot), [snapshot]);
   useEffect(() => () => photos.dispose(), [photos]);
@@ -186,21 +186,21 @@ export function GalleryScene({
 
 /** Everything that does not depend on where the camera is: it re-renders only when the model or the quality changes. */
 const StaticScene = memo(function StaticScene() {
-  const { layout, zones, looks, quality, otherLabel } = useGallery();
+  const { layout, zones, looks, quality } = useGallery();
   const last = zones.length - 1;
   return (
     <>
       {zones.map((zone, i) => {
         const span = layout.zones[i];
-        const half = PORTAL_SEGMENT_WIDTH / 2;
-        const end = i < last ? layout.zones[i + 1].portalX - half : layout.maxX;
-        const floorStart = i === 0 ? layout.minX : span.portalX - half;
+        const half = DIVIDER_WIDTH / 2;
+        const end = i < last ? layout.zones[i + 1].dividerX - half : layout.maxX;
+        const floorStart = i === 0 ? layout.minX : span.dividerX - half;
         // The first hall has no doorway: a lettered entrance wall, then the wall of the hall.
-        const wallRanges: [number, number][] = i === 0 ? [[layout.minX, layout.entrance.end], [layout.entrance.end, end]] : [[span.portalX + half, end]];
+        const wallRanges: [number, number][] = i === 0 ? [[layout.minX, layout.entrance.end], [layout.entrance.end, end]] : [[span.dividerX + half, end]];
         return (
           <group key={zone.id}>
             <Zone zoneIndex={i} floorRange={[floorStart, end]} wallRanges={wallRanges} layout={layout} isFirst={i === 0} isLast={i === last} look={looks[i]} />
-            {i > 0 ? <Portal x={span.portalX} title={zoneTitle(zone, otherLabel)} look={looks[i]} fromLook={looks[i - 1]} /> : null}
+            {i > 0 ? <Divider index={i} x={span.dividerX} /> : null}
             {quality.props ? <CeilingTrack range={[floorStart, end]} xs={layout.artworks.filter((a) => a.zoneIndex === i).map((a) => a.x)} lit={looks[i].lighting.spots} /> : null}
           </group>
         );

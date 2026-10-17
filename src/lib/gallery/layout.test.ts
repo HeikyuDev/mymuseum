@@ -3,7 +3,7 @@ import { artworkSize, photoSize } from "./frame-specs";
 import {
   ENTRANCE_LETTERING_WIDTH,
   EYE_CENTER,
-  PORTAL_WIDTH,
+  DIVIDER_WIDTH,
   buildLayout,
   gapBetween,
   hallStopIndex,
@@ -104,22 +104,22 @@ describe("buildLayout", () => {
     expect(gapBetween(9, 9)).toBe(1.9);
   });
 
-  it("places portals so artworks never touch them", () => {
+  it("places dividers so artworks never touch them", () => {
     for (const zone of layout.zones) {
       const inZone = layout.artworks.filter((a) => a.zoneIndex === zone.zoneIndex);
       for (const a of inZone) {
-        expect(a.x - a.outerW / 2).toBeGreaterThan(zone.portalX + PORTAL_WIDTH / 2);
+        expect(a.x - a.outerW / 2).toBeGreaterThan(zone.dividerX + DIVIDER_WIDTH / 2);
       }
     }
     for (let i = 1; i < layout.zones.length; i += 1) {
       const prevLast = layout.artworks.filter((a) => a.zoneIndex === i - 1).at(-1)!;
-      expect(layout.zones[i].portalX - PORTAL_WIDTH / 2).toBeGreaterThan(prevLast.x + prevLast.outerW / 2);
+      expect(layout.zones[i].dividerX - DIVIDER_WIDTH / 2).toBeGreaterThan(prevLast.x + prevLast.outerW / 2);
     }
   });
 
   it("makes zones contiguous: each zone ends where the next starts", () => {
     for (let i = 0; i < layout.zones.length - 1; i += 1) expect(layout.zones[i].end).toBe(layout.zones[i + 1].start);
-    expect(layout.minX).toBeLessThan(layout.zones[0].portalX);
+    expect(layout.minX).toBeLessThan(layout.zones[0].dividerX);
     expect(layout.maxX).toBe(layout.zones.at(-1)!.end);
   });
 
@@ -147,7 +147,7 @@ describe("buildLayout", () => {
 
   it("keeps the doorways between halls where they were", () => {
     expect(layout.stops.filter((stop) => stop.kind === "hall")).toHaveLength(layout.zones.length);
-    expect(layout.stops.find((stop) => stop.id === "hall:h2")?.x).toBe(layout.zones[1].portalX);
+    expect(layout.stops.find((stop) => stop.id === "hall:h2")?.x).toBe(layout.zones[1].dividerX);
   });
 
   it("puts the plaque below the frame, inside the wall", () => {
@@ -165,17 +165,17 @@ describe("zone lookups", () => {
     const stop = layout.stops[4];
     expect(nearestStop(layout, stop.x + 0.01)).toBe(4);
     expect(zoneIndexAt(layout, layout.minX - 5)).toBe(0);
-    expect(zoneIndexAt(layout, layout.zones[1].portalX + 0.1)).toBe(1);
+    expect(zoneIndexAt(layout, layout.zones[1].dividerX + 0.1)).toBe(1);
     expect(zoneIndexAt(layout, layout.maxX)).toBe(layout.zones.length - 1);
   });
 
-  it("blends smoothly around portals and is flat elsewhere", () => {
-    const portal = layout.zones[1].portalX;
-    expect(zoneBlendAt(layout, portal - 10)).toEqual({ from: 0, to: 0, amount: 0 });
-    expect(zoneBlendAt(layout, portal).amount).toBeCloseTo(0.5, 5);
-    expect(zoneBlendAt(layout, portal + 2.6)).toEqual({ from: 1, to: 1, amount: 0 });
+  it("blends smoothly around dividers and is flat elsewhere", () => {
+    const divider = layout.zones[1].dividerX;
+    expect(zoneBlendAt(layout, divider - 10)).toEqual({ from: 0, to: 0, amount: 0 });
+    expect(zoneBlendAt(layout, divider).amount).toBeCloseTo(0.5, 5);
+    expect(zoneBlendAt(layout, divider + 2.6)).toEqual({ from: 1, to: 1, amount: 0 });
     let last = -1;
-    for (let x = portal - 3; x <= portal + 3; x += 0.25) {
+    for (let x = divider - 3; x <= divider + 3; x += 0.25) {
       const { amount, from, to } = zoneBlendAt(layout, x);
       if (from !== to) {
         expect(amount).toBeGreaterThanOrEqual(last);

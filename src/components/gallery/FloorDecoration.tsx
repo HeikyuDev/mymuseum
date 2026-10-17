@@ -22,7 +22,7 @@ export function FloorDecoration({ zoneIndex, look, layout, range }: Props) {
   const color = look.decorationColor ?? spec.color;
   const artworks = layout.artworks.filter((a) => a.zoneIndex === zoneIndex);
   if (spec.kind === "runner") {
-    return <Runner range={range} color={color} trimmed={look.decoration === "red_carpet" || look.decoration === "runner_gold_trim"} />;
+    return <Runner range={range} inset={[zoneIndex === 0 ? 0.25 : 0, zoneIndex === layout.zones.length - 1 ? 0.25 : 0]} color={color} trimmed={look.decoration === "red_carpet" || look.decoration === "runner_gold_trim"} />;
   }
   if (spec.kind === "rug") {
     return (
@@ -48,10 +48,12 @@ export function FloorDecoration({ zoneIndex, look, layout, range }: Props) {
  * A woven runner: a pile top with a tight soft weave, a slightly darker flat border and a thin
  * muted trim line inset from the edge. The thickness is a low box so the edge catches light.
  */
-function Runner({ range, color, trimmed }: { range: readonly [number, number]; color: string; trimmed: boolean }) {
+function Runner({ range, inset, color, trimmed }: { range: readonly [number, number]; inset: readonly [number, number]; color: string; trimmed: boolean }) {
   const { surfaces, resources } = useGallery();
-  const [r0, r1] = range;
-  const length = r1 - r0 - 0.5;
+  // A runner crosses the divider walls without a gap; it only stops short of the two ends of the museum.
+  const r0 = range[0] + inset[0];
+  const r1 = range[1] - inset[1];
+  const length = r1 - r0;
   const center = (r0 + r1) / 2;
   const maps = surfaces.pile(color);
   const key = length.toFixed(3);

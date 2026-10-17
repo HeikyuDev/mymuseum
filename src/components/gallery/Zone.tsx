@@ -21,7 +21,7 @@ type Props = {
   zoneIndex: number;
   /** Floor and ceiling extent along x. */
   floorRange: readonly [number, number];
-  /** Plain wall extents along x (portal pieces are separate). */
+  /** Plain wall extents along x (the divider walls between categories are separate). */
   wallRanges: readonly (readonly [number, number])[];
   layout: MuseumLayout;
   isFirst: boolean;
@@ -173,7 +173,7 @@ export function wallMaterialFor(
   });
 }
 
-function WallSegment({ range, look, trim, modern = false, zoneIndex, spots, spotColor }: { range: readonly [number, number]; look: ZoneLook; trim: string; modern?: boolean; zoneIndex: number; spots: readonly BakedSpot[]; spotColor: Color }) {
+export function WallSegment({ range, look, trim, modern = false, zoneIndex, spots, spotColor }: { range: readonly [number, number]; look: ZoneLook; trim: string; modern?: boolean; zoneIndex: number; spots: readonly BakedSpot[]; spotColor: Color }) {
   const { surfaces, resources, mood, quality } = useGallery();
   const wallMaps = surfaces.wall(look.wallStyle, look.wallColor);
   const wallLength = range[1] - range[0];

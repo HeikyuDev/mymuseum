@@ -3,19 +3,21 @@ import { artworkSize, type ArtworkSize } from "./frame-specs";
 
 // Deterministic, pure layout of the whole museum: ONE long gallery whose art wall
 // runs along the X axis (the wall plane is z = 0, the visitor stands at z > 0).
-// Halls are consecutive zones separated by portals. No randomness, no DOM.
+// Halls are consecutive zones separated by solid divider walls. No randomness, no DOM.
 
 export const EYE_CENTER = 1.62; // height of the artwork centers (m)
 export const WALL_HEIGHT = 3.9;
 export const ROOM_DEPTH = 8;
-export const PORTAL_WIDTH = 3.6;
-export const PORTAL_HEIGHT = 2.85;
+/** Width of the divider wall between two categories (a rhythmic pause on the same wall plane, not an opening). */
+export const DIVIDER_WIDTH = 3.4;
 export const LOBBY_LENGTH = 7; // entrance wall: from the museum's west end to the first hall's origin
-const START_PAD = 1.5; // portal edge -> first artwork edge
-const END_PAD = 1.5; // last artwork edge -> next portal edge
+const START_PAD = 1.3; // divider edge -> first artwork edge
+const END_PAD = 1.3; // last artwork edge -> next divider edge
 const END_CAP = 2.2; // last artwork edge -> closing wall of the museum
 /** Width of the lettered area of the entrance wall (a phone sees about 3 m of wall at the distance the camera can reach). */
 export const ENTRANCE_LETTERING_WIDTH = 2.6;
+/** Width of the lettered area of a divider wall. */
+export const DIVIDER_LETTERING_WIDTH = 2.6;
 const PLAQUE_GAP = 0.2;
 const PLAQUE_HEIGHT = 0.21;
 
@@ -57,8 +59,8 @@ export type ZoneSpan = {
   /** Wall range owned by this zone (the first zone also owns the lobby). */
   start: number;
   end: number;
-  /** Center of the portal that opens this zone. */
-  portalX: number;
+  /** Center of the divider wall that opens this zone (for the first zone, the nominal origin: it has no divider). */
+  dividerX: number;
   artworkCount: number;
 };
 
@@ -99,18 +101,18 @@ export function buildLayout(input: readonly LayoutZoneInput[]): MuseumLayout {
   const artworks: ArtworkPlacement[] = [];
   const stops: CameraStop[] = [];
 
-  let portalX = 0;
-  let entrance: EntranceWall = { start: -LOBBY_LENGTH, end: PORTAL_WIDTH / 2, centerX: (PORTAL_WIDTH / 2 - LOBBY_LENGTH) / 2 };
+  let dividerX = 0;
+  let entrance: EntranceWall = { start: -LOBBY_LENGTH, end: DIVIDER_WIDTH / 2, centerX: (DIVIDER_WIDTH / 2 - LOBBY_LENGTH) / 2 };
   zonesWithArt.forEach((zone, zoneIndex) => {
     if (zoneIndex > 0) {
       const last = artworks[artworks.length - 1];
-      portalX = last.x + last.outerW / 2 + END_PAD + PORTAL_WIDTH / 2;
+      dividerX = last.x + last.outerW / 2 + END_PAD + DIVIDER_WIDTH / 2;
     }
 
     if (zoneIndex === 0) {
       // The first hall has no doorway: its "entrance stop" frames the lettered wall at the start of the museum.
-      const start = portalX - LOBBY_LENGTH;
-      const end = portalX + PORTAL_WIDTH / 2;
+      const start = dividerX - LOBBY_LENGTH;
+      const end = dividerX + DIVIDER_WIDTH / 2;
       entrance = { start, end, centerX: (start + end) / 2 };
       stops.push({ id: `hall:${zone.id}`, kind: "hall", zoneIndex, x: entrance.centerX, targetW: ENTRANCE_LETTERING_WIDTH + 0.8, targetH: 2.4, focusY: 2.05 });
     } else {
@@ -118,14 +120,14 @@ export function buildLayout(input: readonly LayoutZoneInput[]): MuseumLayout {
         id: `hall:${zone.id}`,
         kind: "hall",
         zoneIndex,
-        x: portalX,
-        targetW: PORTAL_WIDTH + 1.4,
-        targetH: PORTAL_HEIGHT + 0.9,
-        focusY: (PORTAL_HEIGHT + 0.9) / 2 + 0.35,
+        x: dividerX,
+        targetW: DIVIDER_LETTERING_WIDTH + 0.8,
+        targetH: 2.4,
+        focusY: 2.05,
       });
     }
 
-    let cursor = portalX + PORTAL_WIDTH / 2 + START_PAD;
+    let cursor = dividerX + DIVIDER_WIDTH / 2 + START_PAD;
     let previousOuterW = 0;
     zone.artworks.forEach((item, indexInZone) => {
       const size = artworkSize(item.aspect, item.frameStyle, item.mat);
@@ -170,9 +172,9 @@ export function buildLayout(input: readonly LayoutZoneInput[]): MuseumLayout {
       name: zone.name,
       kind: zone.kind,
       zoneIndex,
-      start: zoneIndex === 0 ? portalX - LOBBY_LENGTH : portalX,
-      end: 0, // filled below once the next portal is known
-      portalX,
+      start: zoneIndex === 0 ? dividerX - LOBBY_LENGTH : dividerX,
+      end: 0, // filled below once the next divider is known
+      dividerX,
       artworkCount: zone.artworks.length,
     });
   });
@@ -180,7 +182,7 @@ export function buildLayout(input: readonly LayoutZoneInput[]): MuseumLayout {
   const lastArtwork = artworks[artworks.length - 1];
   const maxX = lastArtwork ? lastArtwork.x + lastArtwork.outerW / 2 + END_CAP : 0;
   zones.forEach((zone, i) => {
-    zone.end = i < zones.length - 1 ? zones[i + 1].portalX : maxX;
+    zone.end = i < zones.length - 1 ? zones[i + 1].dividerX : maxX;
   });
 
   const firstArtworkStop = Math.max(
@@ -213,17 +215,17 @@ export type ZoneBlend = { from: number; to: number; amount: number };
 
 /**
  * Which two zones the camera at `x` is between and how far toward the second.
- * Blending is centered on each portal, so scene colors cross-fade right where the
+ * Blending is centered on each divider, so scene colors cross-fade right where the
  * visitor walks through the arch (never a pop).
  */
 export function zoneBlendAt(layout: MuseumLayout, x: number, transition = 2.4): ZoneBlend {
   const { zones } = layout;
   if (zones.length === 0) return { from: 0, to: 0, amount: 0 };
   for (let i = 1; i < zones.length; i += 1) {
-    const portal = zones[i].portalX;
-    if (x < portal - transition) return { from: i - 1, to: i - 1, amount: 0 };
-    if (x <= portal + transition) {
-      const t = (x - (portal - transition)) / (2 * transition);
+    const divider = zones[i].dividerX;
+    if (x < divider - transition) return { from: i - 1, to: i - 1, amount: 0 };
+    if (x <= divider + transition) {
+      const t = (x - (divider - transition)) / (2 * transition);
       const eased = t * t * (3 - 2 * t);
       return { from: i - 1, to: i, amount: eased };
     }

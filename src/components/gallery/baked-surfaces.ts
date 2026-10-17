@@ -1,5 +1,4 @@
 import { BufferGeometry, Color, Float32BufferAttribute, PlaneGeometry, type BufferAttribute } from "three";
-import { TessellateModifier } from "three/examples/jsm/modifiers/TessellateModifier.js";
 import { floorLightInto, tintChannel, wallLightInto, type BakedLight, type BakedSpot } from "@/lib/gallery/baked-light";
 import { scaleUv } from "./geometry";
 
@@ -27,20 +26,6 @@ export function bakedWall(length: number, height: number, tileMeters: number, ce
   const light: BakedLight = { gain: 1, pool: 0 };
   for (let i = 0; i < position.count; i += 1) {
     wallLightInto(light, centerX + position.getX(i), position.getY(i) + height / 2, height, bake.spots, bake.glow, bake.lift);
-    paintVertex(colors, i, light, bake.spot);
-  }
-  geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
-  return geometry;
-}
-
-/** Adds baked light to a flat wall piece (the wall around a doorway): it is subdivided first so it can carry the gradient. */
-export function bakeWallPiece(source: BufferGeometry, originX: number, height: number, bake: Bake): BufferGeometry {
-  const geometry = new TessellateModifier(WALL_COLUMN, 6).modify(source.toNonIndexed());
-  const position = geometry.getAttribute("position") as BufferAttribute;
-  const colors = new Float32Array(position.count * 3);
-  const light: BakedLight = { gain: 1, pool: 0 };
-  for (let i = 0; i < position.count; i += 1) {
-    wallLightInto(light, originX + position.getX(i), position.getY(i), height, bake.spots, bake.glow, bake.lift);
     paintVertex(colors, i, light, bake.spot);
   }
   geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
