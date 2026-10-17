@@ -35,8 +35,6 @@ export function GalleryCanvas({ quality, interactive = true, frameloop = "demand
         // Filmic tone mapping greys out the unlit-looking baked walls; the neutral curve keeps their colors.
         gl.toneMapping = quality.baked ? NeutralToneMapping : ACESFilmicToneMapping;
         gl.outputColorSpace = SRGBColorSpace;
-        const canvas = gl.domElement;
-        canvas.addEventListener("webglcontextlost", (event) => event.preventDefault());
       }}
       onPointerMissed={onPointerMissed}
     >

@@ -42,6 +42,8 @@ export type SceneCallbacks = {
   onSelectArtwork?: (artworkIndex: number) => void;
   /** Reports when an artwork inside the loading window finished (or failed) loading its photo. */
   onPhotoSettled?: (artworkIndex: number, ok: boolean) => void;
+  /** The WebGL context stayed lost for a few seconds (true) or came back (false). */
+  onContextState?: (lost: boolean) => void;
 };
 
 export type GalleryContextValue = {

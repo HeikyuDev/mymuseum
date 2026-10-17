@@ -15,7 +15,7 @@ import { Culler } from "./Culler";
 import { EntranceWall } from "./EntranceWall";
 import { FocusStore, GalleryProvider, zoneTitle, useGallery, type GalleryContextValue, type MotionState, type SceneCallbacks } from "./context";
 import { Lighting } from "./Lighting";
-import { MotionResolution, TextureUploader } from "./MotionDriver";
+import { ContextGuard, MotionResolution, TextureUploader } from "./MotionDriver";
 import { PhotoStore } from "./photo-store";
 import { Portal, PORTAL_SEGMENT_WIDTH } from "./Portal";
 import { Resources } from "./resources";
@@ -64,6 +64,7 @@ export type GallerySceneProps = {
   introSeconds?: number;
   onSelectArtwork?: (artworkIndex: number) => void;
   onPhotoSettled?: (artworkIndex: number, ok: boolean) => void;
+  onContextState?: (lost: boolean) => void;
   /** Fires once every shader of the scene has been compiled (off the main thread when the browser allows). */
   onCompiled?: () => void;
   onArrive?: (stopIndex: number) => void;
@@ -90,6 +91,7 @@ export function GalleryScene({
   introSeconds,
   onSelectArtwork,
   onPhotoSettled,
+  onContextState,
   onCompiled,
   onArrive,
   telemetry,
@@ -126,8 +128,8 @@ export function GalleryScene({
   useEffect(() => focus.set(focusIndex), [focus, focusIndex]);
   const callbacks = useRef<SceneCallbacks>({});
   useEffect(() => {
-    callbacks.current = { onSelectArtwork, onPhotoSettled };
-  }, [onSelectArtwork, onPhotoSettled]);
+    callbacks.current = { onSelectArtwork, onPhotoSettled, onContextState };
+  }, [onSelectArtwork, onPhotoSettled, onContextState]);
   const motion = useMemo<MotionState>(() => ({ moving: false, restSince: 0, targetX: 0 }), []);
 
   const value = useMemo<GalleryContextValue>(
@@ -173,6 +175,7 @@ export function GalleryScene({
       <StaticScene />
       <Culler />
       {snapshot ? null : <TextureUploader />}
+      {snapshot ? null : <ContextGuard />}
       <MotionResolution />
       {quality.baked && !snapshot ? <ScreenVignette /> : null}
       {extras}

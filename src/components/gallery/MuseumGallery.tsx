@@ -9,6 +9,7 @@ import { useI18n } from "@/lib/i18n/provider";
 import { sceneMood } from "@/lib/gallery/scene-look";
 import type { ViewerMuseum } from "@/lib/viewer-model";
 import { readPreference, useDeviceProfile, writePreference } from "./device";
+import { CanvasBoundary } from "./CanvasBoundary";
 import { GalleryCanvas } from "./GalleryCanvas";
 import { isPerfDebug } from "./perf-store";
 import { PerfGovernor } from "./PerfGovernor";
@@ -30,6 +31,8 @@ const noopSubscribe = () => () => {};
 
 const READY_FALLBACK_MS = 14000;
 const MIN_LOADING_MS = 900;
+/** If the shaders of a (re)mounted canvas are not ready by then, start drawing anyway. */
+const COMPILE_TIMEOUT_MS = 12000;
 
 /** Full-viewport immersive museum: a 3D gallery on rails with minimal floating controls. */
 export function MuseumGallery({ museum }: Props) {
@@ -51,6 +54,8 @@ export function MuseumGallery({ museum }: Props) {
   const perfDebug = useSyncExternalStore(noopSubscribe, isPerfDebug, () => false);
   const progress = useLoadProgress();
   const startedAt = useRef<number | null>(null);
+  const [contextLost, setContextLost] = useState(false);
+  const [failedPhotos, setFailedPhotos] = useState<readonly number[]>([]);
 
   // Starting tier: the URL override wins, then the visitor's choice, then what the device looks capable of.
   // In Auto the governor then walks down the ladder (resolution, shadows and reflection, baked tier last).
@@ -85,6 +90,16 @@ export function MuseumGallery({ museum }: Props) {
   }, [sceneReady, loaded, released]);
 
   const markCompiled = useCallback(() => setCompiledTier(tier), [tier]);
+  // A canvas whose shaders never report back (a driver that stalls) must not stay blank for good.
+  useEffect(() => {
+    if (!tier || compiled) return;
+    const timer = window.setTimeout(() => setCompiledTier(tier), COMPILE_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [tier, compiled]);
+
+  const onPhotoSettled = useCallback((index: number, ok: boolean) => {
+    setFailedPhotos((list) => (ok ? (list.includes(index) ? list.filter((item) => item !== index) : list) : list.includes(index) ? list : [...list, index]));
+  }, []);
 
   const onDegrade = useCallback(() => setGovernedLevel((value) => value + 1), []);
 
@@ -158,6 +173,7 @@ export function MuseumGallery({ museum }: Props) {
   return (
     <div className="relative h-dvh w-full touch-pan-y overflow-hidden select-none" style={{ background: mood.background }} data-testid="museum-gallery">
       {device && quality && fonts ? (
+        <CanvasBoundary fallback={<WebglFallback museum={museum} />}>
         <GalleryCanvas
           key={quality.tier}
           model={model}
@@ -174,6 +190,8 @@ export function MuseumGallery({ museum }: Props) {
           frameloop={compiled ? "demand" : "never"}
           onCompiled={markCompiled}
           onSelectArtwork={selectArtwork}
+          onPhotoSettled={onPhotoSettled}
+          onContextState={setContextLost}
           onPointerMissed={() => setZoomed(false)}
           label={t("viewer.sceneLabel", { name: museum.title })}
           telemetry={process.env.NODE_ENV !== "production" ? exposeTelemetry : undefined}
@@ -188,11 +206,27 @@ export function MuseumGallery({ museum }: Props) {
             </>
           }
         />
+        </CanvasBoundary>
+      ) : null}
+
+      {released && !compiled ? (
+        <div role="status" className="absolute inset-0 z-30 flex items-center justify-center px-8 text-center text-sm tracking-[0.2em] text-fg uppercase" style={{ background: mood.background }}>
+          {t("viewer.adjusting")}
+        </div>
+      ) : null}
+
+      {contextLost ? (
+        <div role="alert" className="absolute inset-x-4 top-1/2 z-40 mx-auto flex max-w-sm -translate-y-1/2 flex-col items-center gap-4 rounded-3xl bg-black/80 p-6 text-center text-white">
+          <p>{t("viewer.contextLost")}</p>
+          <button type="button" onClick={() => window.location.reload()} className={`${glass} ${glassHover} h-11 px-6 text-sm tracking-wide`}>
+            {t("viewer.reload")}
+          </button>
+        </div>
       ) : null}
 
       <h1 className="sr-only">{museum.title}</h1>
       <p className="sr-only" aria-live="polite" role="status">
-        {released ? announcement : ""}
+        {released ? (artwork && failedPhotos.includes(artwork.index) ? t("viewer.photoFailed", { title: artwork.title }) : announcement) : ""}
       </p>
 
       {released ? (

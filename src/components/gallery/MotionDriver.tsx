@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useGallery } from "./context";
 
 /** Full-size textures wait this long after the camera arrives before they go to the GPU. */
@@ -26,12 +26,26 @@ export function TextureUploader() {
     return () => photos.detach();
   }, [photos, gl, invalidate, motion]);
 
+  // Photos that failed (offline, a server hiccup) get another go when the browser is back online.
+  useEffect(() => {
+    const retry = () => photos.retryFailed();
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
+  }, [photos]);
+
   // Photos decoded behind the loading screen are waiting; draw as soon as frames are allowed.
   useEffect(() => {
     if (frameloop !== "never") invalidate();
   }, [frameloop, invalidate]);
 
+  const retried = useRef(false);
   useFrame(() => {
+    // A failed photo under the camera is tried again once, each time the camera comes to rest on it.
+    if (motion.moving) retried.current = false;
+    else if (!retried.current && photos.hasRetryable && performance.now() - motion.restSince > DECODE_DELAY_MS) {
+      retried.current = true;
+      photos.retryFailed();
+    }
     // Keep frames coming while work waits for the camera to rest (it runs in the frame loop).
     if (photos.waiting > 0) {
       if (!motion.moving && performance.now() - motion.restSince > DECODE_DELAY_MS) photos.startDeferred();
@@ -42,6 +56,62 @@ export function TextureUploader() {
     photos.uploadOne(!resting);
     if (photos.pending > 0) invalidate();
   });
+  return null;
+}
+
+/** A lost context that has not come back after this long is reported to the page (it offers a reload). */
+const CONTEXT_LOST_GRACE_MS = 3000;
+
+/**
+ * Keeps the canvas alive across the things a phone does to it: the browser may take the WebGL context away
+ * (backgrounded tab, memory pressure) and give it back later, in which case photo textures have lost their GPU
+ * copy and are decoded again; a tab that comes back, a rotation or a resize must redraw even though nothing
+ * asked for a frame (the loop only runs on demand).
+ */
+export function ContextGuard() {
+  const { photos, callbacks } = useGallery();
+  const gl = useThree((state) => state.gl);
+  const invalidate = useThree((state) => state.invalidate);
+
+  useEffect(() => {
+    const canvas = gl.domElement;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const redraw = () => {
+      invalidate();
+      // Browsers settle the new size a moment after the event.
+      setTimeout(invalidate, 250);
+    };
+    const onLost = (event: Event) => {
+      event.preventDefault(); // required for the browser to be allowed to restore the context
+      timer ??= setTimeout(() => callbacks.current.onContextState?.(true), CONTEXT_LOST_GRACE_MS);
+    };
+    const onRestored = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      callbacks.current.onContextState?.(false);
+      gl.shadowMap.needsUpdate = true;
+      photos.reloadAll();
+      invalidate();
+    };
+    const onVisible = () => {
+      if (!document.hidden) redraw();
+    };
+    canvas.addEventListener("webglcontextlost", onLost);
+    canvas.addEventListener("webglcontextrestored", onRestored);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", redraw);
+    window.addEventListener("resize", redraw);
+    window.addEventListener("orientationchange", redraw);
+    return () => {
+      if (timer) clearTimeout(timer);
+      canvas.removeEventListener("webglcontextlost", onLost);
+      canvas.removeEventListener("webglcontextrestored", onRestored);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", redraw);
+      window.removeEventListener("resize", redraw);
+      window.removeEventListener("orientationchange", redraw);
+    };
+  }, [gl, invalidate, photos, callbacks]);
   return null;
 }
 
