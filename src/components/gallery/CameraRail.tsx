@@ -2,18 +2,9 @@
 "use client";
 
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
-import { MathUtils, PerspectiveCamera } from "three";
-import {
-  DEFAULT_TUNING,
-  isSettled,
-  restingPose,
-  smoothDamp,
-  travelTime,
-  type DampState,
-  type RailPose,
-  type RailTuning,
-} from "@/lib/gallery/camera-math";
+import { useEffect, useMemo, useState } from "react";
+import { PerspectiveCamera } from "three";
+import { DEFAULT_TUNING, MAX_GLIDE_STEP, glideAt, glideDuration, restingPose, type RailPose, type RailTuning } from "@/lib/gallery/camera-math";
 import { useGallery } from "./context";
 
 export type FixedCamera = { position: [number, number, number]; target: [number, number, number]; fov: number; ndcShiftY?: number };
@@ -22,51 +13,106 @@ type Props = {
   stopIndex: number;
   zoomed: boolean;
   reducedMotion: boolean;
-  /** While true the camera waits at the entrance (loading screen visible). */
+  /** While true the camera waits in front of the entrance wall (loading screen visible). */
   hold: boolean;
   tuning?: RailTuning;
   /** Photo exports and tests place the camera exactly and never animate it. */
   fixed?: FixedCamera;
-  /** Seconds the intro dolly takes. */
+  /** Seconds the opening glide takes. */
   introSeconds?: number;
   onArrive?: (stopIndex: number) => void;
   /** Reports the live camera x for tests and for the UI. */
   telemetry?: (sample: { x: number; z: number; t: number; target?: number; smooth?: number }) => void;
 };
 
-const damp = (): DampState => ({ value: 0, velocity: 0 });
 const ZOOM_IN = 0.62;
-const INTRO_DISTANCE = 6.2;
+/** Frames still drawn after a glide ends, so the restored resolution and the final pose are on screen. */
+const SETTLE_FRAMES = 3;
+/** A resize or a zoom toggle re-frames quickly instead of gliding for a full second. */
+const REFRAME_SECONDS = 0.45;
+
+// Axes: 0 x, 1 y, 2 z of the camera; 3 x, 4 y of the gaze point on the wall.
+const AXES = 5;
+const poseInto = (pose: RailPose, out: Float64Array) => {
+  out[0] = pose.position.x;
+  out[1] = pose.position.y;
+  out[2] = pose.position.z;
+  out[3] = pose.target.x;
+  out[4] = pose.target.y;
+};
+
+type Rail = {
+  cur: Float64Array;
+  vel: Float64Array;
+  from: Float64Array;
+  v0: Float64Array;
+  to: Float64Array;
+  next: Float64Array;
+  scratch: number[];
+  elapsed: number;
+  duration: number;
+  gliding: boolean;
+  /** The glide was just requested: its clock starts on the next frame, so a hitch before it is not eaten by the ease. */
+  fresh: boolean;
+  initialised: boolean;
+  clock: number;
+  tail: number;
+  arrivedStop: number;
+  prevStop: number;
+  prevHold: boolean;
+  prevZoom: boolean;
+  prevAspect: number;
+};
+
+function createRail(): Rail {
+  return {
+    cur: new Float64Array(AXES),
+    vel: new Float64Array(AXES),
+    from: new Float64Array(AXES),
+    v0: new Float64Array(AXES),
+    to: new Float64Array(AXES),
+    next: new Float64Array(AXES),
+    scratch: [0],
+    elapsed: 0,
+    duration: 0,
+    gliding: false,
+    fresh: false,
+    initialised: false,
+    clock: 0,
+    tail: 0,
+    arrivedStop: -1,
+    prevStop: -1,
+    prevHold: true,
+    prevZoom: false,
+    prevAspect: 0,
+  };
+}
 
 /**
- * The rail: the camera never moves freely. It always glides (critically damped,
- * ease in and out) toward the resting pose of the current stop, with a little
- * natural settling sway after each arrival.
+ * The rail: the camera never moves freely. Every move is a glide of fixed duration (longer for longer
+ * trips) along a smootherstep curve, evaluated from elapsed time, so it is deterministic and arrives on
+ * time whatever the frame rate. Position and gaze share the same curve (no overshoot, no jitter); an
+ * interrupted glide hands its velocity to the next one. Nothing here touches React state.
  */
-export function CameraRail({ stopIndex, zoomed, reducedMotion, hold, tuning = DEFAULT_TUNING, fixed, introSeconds = 3.4, onArrive, telemetry }: Props) {
-  const { layout, cameraX } = useGallery();
+export function CameraRail({ stopIndex, zoomed, reducedMotion, hold, tuning = DEFAULT_TUNING, fixed, introSeconds = 2.6, onArrive, telemetry }: Props) {
+  const { layout, cameraX, motion } = useGallery();
   const camera = useThree((state) => state.camera) as PerspectiveCamera;
   const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
 
   const stop = layout.stops[stopIndex] ?? layout.stops[0];
-  const state = useRef({
-    px: damp(),
-    py: damp(),
-    pz: damp(),
-    tx: damp(),
-    ty: damp(),
-    smooth: 0.9,
-    arrivedAt: 0,
-    arrived: true,
-    initialised: false,
-    stopIndex: -1,
-    clock: 0,
-    holdPrev: true,
-  });
+  const entrance = layout.stops[0];
+  const [rail] = useState(createRail);
   const aspect = size.width / Math.max(size.height, 1);
 
-  const rest = useMemo<RailPose | null>(() => (stop ? restingPose(stop.x, stop.targetW, stop.targetH, stop.focusY, aspect, tuning, 1) : null), [stop, aspect, tuning]);
+  const poses = useMemo(() => {
+    if (!stop || !entrance) return null;
+    return {
+      rest: restingPose(stop.x, stop.targetW, stop.targetH, stop.focusY, aspect, tuning, 1),
+      zoom: restingPose(stop.x, stop.targetW, stop.targetH, stop.focusY, aspect, tuning, ZOOM_IN),
+      entrance: restingPose(entrance.x, entrance.targetW, entrance.targetH, entrance.focusY, aspect, tuning, 1),
+    };
+  }, [stop, entrance, aspect, tuning]);
 
   // Fixed cameras (photo exports): set once, never animate.
   useEffect(() => {
@@ -92,95 +138,96 @@ export function CameraRail({ stopIndex, zoomed, reducedMotion, hold, tuning = DE
     camera.updateProjectionMatrix();
   }, [camera, tuning.fov, fixed]);
 
-  // A new stop (or the end of the loading hold) starts a transition whose
-  // duration follows the travel distance.
+  // A new stop, a zoom toggle, a resize or the end of the loading hold starts a glide.
   useEffect(() => {
-    if (fixed || !stop) return;
-    const s = state.current;
-    if (s.stopIndex === -1) {
-      s.stopIndex = stopIndex;
-      s.holdPrev = hold;
+    if (fixed || !poses) return;
+    const r = rail;
+    const pose = hold ? poses.entrance : zoomed ? poses.zoom : poses.rest;
+    poseInto(pose, r.next);
+    motion.targetX = r.next[0];
+
+    const first = r.prevStop === -1;
+    const stopChanged = r.prevStop !== stopIndex;
+    const releasing = r.prevHold && !hold;
+    const reframed = r.prevZoom !== zoomed || r.prevAspect !== aspect;
+    r.prevStop = stopIndex;
+    r.prevHold = hold;
+    r.prevZoom = zoomed;
+    r.prevAspect = aspect;
+
+    if (first || !r.initialised) {
+      r.to.set(r.next);
+      invalidate();
       return;
     }
-    if (s.holdPrev && !hold) {
-      s.smooth = reducedMotion ? 0.0001 : introSeconds / 3.2;
-      s.arrived = false;
-    } else if (s.stopIndex !== stopIndex) {
-      s.smooth = travelTime(Math.abs(stop.x - s.px.value), reducedMotion);
-      s.arrived = false;
-    }
-    s.stopIndex = stopIndex;
-    s.holdPrev = hold;
-    invalidate();
-  }, [stopIndex, hold, stop, reducedMotion, introSeconds, invalidate, fixed]);
 
-  useEffect(() => {
+    let seconds: number;
+    if (releasing) seconds = introSeconds;
+    else if (stopChanged) seconds = glideDuration(Math.abs(r.next[0] - r.cur[0]), false);
+    else if (reframed) seconds = REFRAME_SECONDS;
+    else {
+      r.to.set(r.next);
+      return;
+    }
+    r.from.set(r.cur);
+    r.v0.set(r.vel);
+    r.to.set(r.next);
+    r.duration = reducedMotion ? 0 : seconds;
+    r.elapsed = 0;
+    r.gliding = true;
+    r.fresh = true;
+    r.arrivedStop = -1;
+    motion.moving = true;
     invalidate();
-  }, [zoomed, aspect, invalidate]);
+  }, [poses, stopIndex, zoomed, hold, aspect, reducedMotion, introSeconds, invalidate, fixed, motion, rail]);
 
   useFrame((_, delta) => {
-    if (fixed || !rest || !stop) return;
-    const s = state.current;
-    const dt = Math.min(delta, 0.05);
-    s.clock += dt;
+    const r = rail;
+    if (fixed || !poses || !stop) return;
+    r.clock += delta;
 
-    const zoomPose = zoomed ? restingPose(stop.x, stop.targetW, stop.targetH, stop.focusY, aspect, tuning, ZOOM_IN) : rest;
-
-    // While holding, wait further back in the lobby so the intro dolly has room.
-    const holdOffset = hold ? -INTRO_DISTANCE : 0;
-    const targetPos = { x: zoomPose.position.x + holdOffset, y: zoomPose.position.y, z: zoomPose.position.z };
-    const targetLook = { x: zoomPose.target.x + holdOffset, y: zoomPose.target.y };
-
-    if (!s.initialised) {
-      s.px.value = targetPos.x;
-      s.py.value = targetPos.y;
-      s.pz.value = targetPos.z;
-      s.tx.value = targetLook.x;
-      s.ty.value = targetLook.y;
-      s.initialised = true;
+    if (!r.initialised) {
+      r.cur.set(r.to);
+      r.initialised = true;
     }
 
-    const smooth = s.smooth;
-    if (smooth <= 0.001) {
-      // Reduced motion: no travel, the camera simply cuts to the new stop.
-      for (const [damper, value] of [[s.px, targetPos.x], [s.pz, targetPos.z], [s.py, targetPos.y], [s.tx, targetLook.x], [s.ty, targetLook.y]] as const) {
-        damper.value = value;
-        damper.velocity = 0;
+    if (r.gliding) {
+      if (r.fresh) {
+        r.fresh = false;
+      } else {
+        r.elapsed += Math.min(delta, MAX_GLIDE_STEP);
+      }
+      const done = r.duration <= 0 || r.elapsed >= r.duration;
+      for (let i = 0; i < AXES; i += 1) {
+        r.cur[i] = glideAt(r.from[i], r.v0[i], r.to[i], r.duration, r.elapsed, r.scratch);
+        r.vel[i] = done ? 0 : r.scratch[0];
+      }
+      if (done) {
+        r.gliding = false;
+        r.tail = SETTLE_FRAMES;
+        motion.moving = false;
+        motion.restSince = performance.now();
+        if (!hold && r.arrivedStop !== stopIndex) {
+          r.arrivedStop = stopIndex;
+          onArrive?.(stopIndex);
+        }
       }
     } else {
-      smoothDamp(s.px, targetPos.x, smooth, dt, 7.5);
-      smoothDamp(s.pz, targetPos.z, smooth * 1.05, dt, 6);
-      smoothDamp(s.py, targetPos.y, smooth * 1.1, dt, 4);
-      // The gaze trails the body slightly: a cheap, convincing "operator" feel.
-      smoothDamp(s.tx, targetLook.x, smooth * 1.28, dt, 9);
-      smoothDamp(s.ty, targetLook.y, smooth * 1.2, dt, 4);
+      r.cur.set(r.to);
+      r.vel.fill(0);
     }
 
-    const settled =
-      isSettled(s.px, targetPos.x, 0.002, 0.004) &&
-      isSettled(s.pz, targetPos.z, 0.002, 0.004) &&
-      isSettled(s.tx, targetLook.x, 0.002, 0.004) &&
-      isSettled(s.ty, targetLook.y, 0.002, 0.004);
+    camera.position.set(r.cur[0], r.cur[1], r.cur[2]);
+    camera.lookAt(r.cur[3], r.cur[4], 0);
+    cameraX.current = r.cur[0];
+    telemetry?.({ x: r.cur[0], z: r.cur[2], t: r.clock, target: r.to[0] });
 
-    if (settled && !s.arrived && !hold) {
-      s.arrived = true;
-      s.arrivedAt = s.clock;
-      onArrive?.(stopIndex);
+    if (r.gliding) {
+      invalidate();
+    } else if (r.tail > 0) {
+      r.tail -= 1;
+      invalidate();
     }
-
-    // Settling sway: a slow drift that dies out, so a resting camera costs nothing.
-    const sinceArrival = s.arrived ? s.clock - s.arrivedAt : 0;
-    const energy = reducedMotion || hold ? 0 : s.arrived ? MathUtils.clamp(1 - sinceArrival / 2.6, 0, 1) : 1;
-    const sway = energy * energy;
-    const swayX = Math.sin(s.clock * 0.9) * 0.05 * sway;
-    const swayY = Math.sin(s.clock * 1.3 + 1) * 0.018 * sway;
-
-    camera.position.set(s.px.value + swayX, s.py.value + swayY, s.pz.value);
-    camera.lookAt(s.tx.value + swayX * 0.4, s.ty.value, 0);
-    cameraX.current = s.px.value;
-    telemetry?.({ x: s.px.value, z: s.pz.value, t: s.clock, target: targetPos.x, smooth });
-
-    if (!settled || energy > 0 || !s.arrived) invalidate();
   });
 
   return null;

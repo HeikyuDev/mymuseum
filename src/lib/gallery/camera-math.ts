@@ -68,39 +68,43 @@ export function restingPose(x: number, targetW: number, targetH: number, focusY:
   };
 }
 
-export type DampState = { value: number; velocity: number };
+/**
+ * Fifth-order Hermite blend from `p0` (leaving with velocity `v0`) to `p1` (arriving at rest) over `duration` seconds.
+ * With `v0 = 0` it is the classic smootherstep ease-in-out: zero velocity and acceleration at both ends,
+ * monotonic, no overshoot. A non-zero `v0` lets a glide that is interrupted by a new request continue
+ * without a velocity jump. Returns the position and writes the velocity to `out[0]`.
+ */
+export function glideAt(p0: number, v0: number, p1: number, duration: number, elapsed: number, out?: number[]): number {
+  if (duration <= 0 || elapsed >= duration) {
+    if (out) out[0] = 0;
+    return p1;
+  }
+  const s = elapsed <= 0 ? 0 : elapsed / duration;
+  const s2 = s * s;
+  const s3 = s2 * s;
+  const s4 = s3 * s;
+  const s5 = s4 * s;
+  const h0 = 1 - 10 * s3 + 15 * s4 - 6 * s5;
+  const h1 = s - 6 * s3 + 8 * s4 - 3 * s5;
+  const h5 = 10 * s3 - 15 * s4 + 6 * s5;
+  if (out) {
+    const d0 = -30 * s2 + 60 * s3 - 30 * s4;
+    const d1 = 1 - 18 * s2 + 32 * s3 - 15 * s4;
+    const d5 = 30 * s2 - 60 * s3 + 30 * s4;
+    out[0] = (d0 * p0 + d1 * duration * v0 + d5 * p1) / duration;
+  }
+  return h0 * p0 + h1 * duration * v0 + h5 * p1;
+}
 
 /**
- * Critically damped spring (Game Programming Gems 4, as used by Unity's
- * SmoothDamp). Mutates `state`; the result is continuous in position and velocity.
+ * How long a move of `distance` meters takes. Fixed per move (not a spring), so a slow frame never
+ * makes the glide drag on: short hops take about a second, a trip across the museum under two.
  */
-export function smoothDamp(state: DampState, target: number, smoothTime: number, dt: number, maxSpeed = Infinity): number {
-  const time = Math.max(0.0001, smoothTime);
-  const omega = 2 / time;
-  const x = omega * dt;
-  const exp = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
-  let change = state.value - target;
-  const originalTarget = target;
-  const maxChange = maxSpeed * time;
-  change = Math.max(-maxChange, Math.min(maxChange, change));
-  const adjustedTarget = state.value - change;
-  const temp = (state.velocity + omega * change) * dt;
-  state.velocity = (state.velocity - omega * temp) * exp;
-  let output = adjustedTarget + (change + temp) * exp;
-  if (originalTarget - state.value > 0 === output > originalTarget) {
-    output = originalTarget;
-    state.velocity = (output - originalTarget) / Math.max(dt, 1e-6);
-  }
-  state.value = output;
-  return output;
+export function glideDuration(distance: number, reducedMotion: boolean): number {
+  if (reducedMotion) return 0;
+  const d = Math.abs(distance);
+  return 0.9 + 0.8 * (1 - Math.exp(-d / 18));
 }
 
-export function isSettled(state: DampState, target: number, positionEpsilon = 0.0008, velocityEpsilon = 0.0008): boolean {
-  return Math.abs(state.value - target) < positionEpsilon && Math.abs(state.velocity) < velocityEpsilon;
-}
-
-/** Longer hops (across halls) take a little longer, bounded so nothing drags. */
-export function travelTime(distance: number, reducedMotion: boolean): number {
-  if (reducedMotion) return 0.0001;
-  return Math.min(1.6, 0.7 + Math.abs(distance) * 0.06);
-}
+/** Longest simulated step per frame: a hitch eats part of a glide (and the ease hides it), it never teleports the camera. */
+export const MAX_GLIDE_STEP = 0.08;

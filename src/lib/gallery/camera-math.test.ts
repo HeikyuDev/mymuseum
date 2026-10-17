@@ -4,10 +4,9 @@ import {
   framingDistance,
   horizontalFov,
   pitchForFocus,
+  glideAt,
+  glideDuration,
   restingPose,
-  smoothDamp,
-  travelTime,
-  type DampState,
 } from "./camera-math";
 
 describe("framingDistance", () => {
@@ -59,43 +58,52 @@ describe("restingPose", () => {
   });
 });
 
-describe("smoothDamp", () => {
-  it("moves continuously without teleporting and converges without overshoot", () => {
-    const state: DampState = { value: 0, velocity: 0 };
-    let previous = 0;
-    let maxStep = 0;
-    for (let i = 0; i < 600; i += 1) {
-      const value = smoothDamp(state, 10, 0.7, 1 / 60);
-      expect(value).toBeGreaterThanOrEqual(previous - 1e-9);
-      expect(value).toBeLessThanOrEqual(10 + 1e-9);
-      maxStep = Math.max(maxStep, value - previous);
+describe("glideAt", () => {
+  it("is smootherstep from rest: monotonic, slow at both ends, exact at the end", () => {
+    let previous = -1;
+    const vel = [0];
+    for (let i = 0; i <= 100; i += 1) {
+      const value = glideAt(0, 0, 10, 1, i / 100, vel);
+      expect(value).toBeGreaterThanOrEqual(previous);
+      expect(value).toBeLessThanOrEqual(10);
       previous = value;
     }
-    expect(maxStep).toBeLessThan(0.5);
-    expect(state.value).toBeCloseTo(10, 3);
+    expect(glideAt(0, 0, 10, 1, 0.01)).toBeLessThan(0.001);
+    expect(glideAt(0, 0, 10, 1, 0.5)).toBeCloseTo(5, 6);
+    expect(glideAt(0, 0, 10, 1, 1)).toBe(10);
+    expect(glideAt(0, 0, 10, 1, 5)).toBe(10);
+    glideAt(0, 0, 10, 1, 0.5, vel);
+    expect(vel[0]).toBeCloseTo(18.75, 4);
   });
 
-  it("starts and ends slowly (ease in and out)", () => {
-    const state: DampState = { value: 0, velocity: 0 };
-    const first = smoothDamp(state, 10, 0.7, 1 / 60);
-    expect(first).toBeLessThan(0.05);
+  it("is deterministic for a given elapsed time, whatever the frame rate", () => {
+    const at = (steps: number) => {
+      let t = 0;
+      for (let i = 0; i < steps; i += 1) t += 0.7 / steps;
+      return glideAt(2, 0, 9, 1.2, t);
+    };
+    expect(at(10)).toBeCloseTo(at(100), 9);
   });
 
-  it("respects the maximum speed", () => {
-    const state: DampState = { value: 0, velocity: 0 };
-    let previous = 0;
-    for (let i = 0; i < 120; i += 1) {
-      const value = smoothDamp(state, 1000, 0.5, 1 / 60, 4);
-      expect((value - previous) * 60).toBeLessThan(4.5);
-      previous = value;
-    }
+  it("continues an interrupted glide without a velocity jump", () => {
+    const vel = [0];
+    const x = glideAt(0, 0, 10, 1, 0.4, vel);
+    const v = vel[0];
+    const resumed = [0];
+    expect(glideAt(x, v, 20, 1.2, 0, resumed)).toBeCloseTo(x, 9);
+    expect(resumed[0]).toBeCloseTo(v, 6);
+  });
+
+  it("does not move when the duration is zero", () => {
+    expect(glideAt(1, 0, 4, 0, 0)).toBe(4);
   });
 });
 
-describe("travelTime", () => {
+describe("glideDuration", () => {
   it("is instant with reduced motion and bounded otherwise", () => {
-    expect(travelTime(12, true)).toBeLessThan(0.01);
-    expect(travelTime(1, false)).toBeLessThan(travelTime(30, false));
-    expect(travelTime(500, false)).toBeLessThanOrEqual(1.6);
+    expect(glideDuration(12, true)).toBe(0);
+    expect(glideDuration(1, false)).toBeLessThan(glideDuration(30, false));
+    expect(glideDuration(3.5, false)).toBeGreaterThanOrEqual(0.9);
+    expect(glideDuration(500, false)).toBeLessThanOrEqual(1.7);
   });
 });
