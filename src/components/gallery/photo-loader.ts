@@ -1,5 +1,6 @@
 import { CanvasTexture, LinearMipmapLinearFilter, SRGBColorSpace, Texture } from "three";
 import { readImageSize } from "./image-size";
+import { Limiter } from "./limiter";
 
 // Photo decoding for the 3D scene. Photos are fetched, decoded off the main thread with
 // createImageBitmap (resized on the way when they exceed the tier cap), limited to a few
@@ -16,28 +17,44 @@ export function flipPlaneUv(uv: { count: number; getY(i: number): number; setY(i
   uv.needsUpdate = true;
 }
 
-// ---- concurrency ----------------------------------------------------------------------------
+// ---- concurrency and failures -----------------------------------------------------------------
 
-let active = 0;
-const waiting: Array<{ priority: number; wake: () => void }> = [];
+const limiter = new Limiter();
 
-/** Lower priority numbers go first (the artwork in front of the camera beats a far neighbour). */
-async function acquire(limit: number, priority: number): Promise<void> {
-  if (active < limit) {
-    active += 1;
-    return;
+/** A photo that could not be loaded. `permanent` failures (the file does not exist) are not worth retrying. */
+export class PhotoLoadError extends Error {
+  constructor(
+    message: string,
+    readonly permanent: boolean,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = "PhotoLoadError";
   }
-  await new Promise<void>((resolve) => {
-    const at = waiting.findIndex((item) => item.priority > priority);
-    waiting.splice(at < 0 ? waiting.length : at, 0, { priority, wake: resolve });
-  });
-  active += 1;
 }
 
-function release(limit: number) {
-  active -= 1;
-  // Wake as many waiters as the limit allows.
-  while (waiting.length > 0 && active < limit) waiting.shift()?.wake();
+export const isAbort = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
+export const isPermanentPhotoError = (error: unknown) => error instanceof PhotoLoadError && error.permanent;
+
+/** An abort signal that also fires after `ms`; `timedOut()` tells which one it was. */
+function withDeadline(parent: AbortSignal, ms: number) {
+  const controller = new AbortController();
+  let expired = false;
+  const onAbort = () => controller.abort();
+  if (parent.aborted) controller.abort();
+  else parent.addEventListener("abort", onAbort, { once: true });
+  const timer = setTimeout(() => {
+    expired = true;
+    controller.abort();
+  }, ms);
+  return {
+    signal: controller.signal,
+    timedOut: () => expired && !parent.aborted,
+    clear: () => {
+      clearTimeout(timer);
+      parent.removeEventListener("abort", onAbort);
+    },
+  };
 }
 
 // ---- decoding -------------------------------------------------------------------------------
@@ -51,20 +68,28 @@ function applyTextureSettings(texture: Texture, anisotropy: number) {
   texture.needsUpdate = true;
 }
 
-function loadImageElement(url: string): Promise<HTMLImageElement> {
+function loadImageElement(url: string, signal: AbortSignal): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
+    const stop = () => {
+      image.onload = null;
+      image.onerror = null;
+      image.src = "";
+      reject(new DOMException("aborted", "AbortError"));
+    };
+    if (signal.aborted) return stop();
+    signal.addEventListener("abort", stop, { once: true });
     image.crossOrigin = "anonymous"; // keeps WebGL and exported canvases untainted
     image.decoding = "async";
     image.onload = () => void image.decode().catch(() => undefined).then(() => resolve(image));
-    image.onerror = () => reject(new Error("image failed to load"));
+    image.onerror = () => reject(new PhotoLoadError("image failed to load", false));
     image.src = url;
   });
 }
 
 /** Canvas path: SVG sources and images with transparency (drawn on a white sheet). */
-async function viaCanvas(url: string, maxSize: number, anisotropy: number): Promise<LoadedPhoto> {
-  const image = await loadImageElement(url);
+async function viaCanvas(url: string, maxSize: number, anisotropy: number, signal: AbortSignal): Promise<LoadedPhoto> {
+  const image = await loadImageElement(url, signal);
   const width = image.naturalWidth || image.width;
   const height = image.naturalHeight || image.height;
   const scale = Math.min(1, maxSize / Math.max(width, height));
@@ -88,19 +113,39 @@ const supportsBitmap = typeof createImageBitmap === "function" && typeof fetch =
  * Loads one photo as a GPU texture no larger than `maxSize` on its longest side.
  * Rejects when the image is missing (callers fall back or leave the canvas blank).
  */
-export async function loadPhotoTexture(url: string, maxSize: number, anisotropy: number, maxLoads: number, signal: AbortSignal, priority = 2): Promise<LoadedPhoto> {
-  await acquire(maxLoads, priority);
+export async function loadPhotoTexture(url: string, maxSize: number, anisotropy: number, maxLoads: number, signal: AbortSignal, priority = 2, timeoutMs = 20000): Promise<LoadedPhoto> {
+  await limiter.acquire(maxLoads, priority);
+  // The deadline starts when the download does, not while waiting for a slot, and frees the slot when it fires.
+  const deadline = withDeadline(signal, timeoutMs);
   try {
     if (signal.aborted) throw new DOMException("aborted", "AbortError");
-    if (!supportsBitmap) return await viaCanvas(url, maxSize, anisotropy);
-    const response = await fetch(url, { mode: "cors", signal });
-    if (!response.ok) throw new Error(`photo ${response.status}`);
+    return await decode(url, maxSize, anisotropy, deadline.signal);
+  } catch (error) {
+    if (deadline.timedOut()) throw new PhotoLoadError("photo timed out", false);
+    throw error;
+  } finally {
+    deadline.clear();
+    limiter.release(maxLoads);
+  }
+}
+
+async function decode(url: string, maxSize: number, anisotropy: number, signal: AbortSignal): Promise<LoadedPhoto> {
+  {
+    if (!supportsBitmap) return await viaCanvas(url, maxSize, anisotropy, signal);
+    let response: Response;
+    try {
+      response = await fetch(url, { mode: "cors", signal });
+    } catch (error) {
+      if (isAbort(error)) throw error;
+      throw new PhotoLoadError("network error", false);
+    }
+    if (!response.ok) throw new PhotoLoadError(`photo ${response.status}`, response.status === 404 || response.status === 410 || response.status === 403, response.status);
     const blob = await response.blob();
     // Vector sources cannot be decoded to a bitmap, and PNG may carry transparency: use the canvas path.
     if (/svg|png/.test(blob.type)) {
       const objectUrl = URL.createObjectURL(blob);
       try {
-        return await viaCanvas(objectUrl, maxSize, anisotropy);
+        return await viaCanvas(objectUrl, maxSize, anisotropy, signal);
       } finally {
         URL.revokeObjectURL(objectUrl);
       }
@@ -140,7 +185,5 @@ export async function loadPhotoTexture(url: string, maxSize: number, anisotropy:
       texture.onUpdate = null;
     };
     return { texture, width, height };
-  } finally {
-    release(maxLoads);
   }
 }

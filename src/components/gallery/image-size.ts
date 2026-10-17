@@ -3,9 +3,39 @@
 // for a 2400 px photo on a phone), while `createImageBitmap(blob, { resize })` decodes and resizes in the
 // background. Only the second form needs to know the size up front.
 
-export type ImageSize = { width: number; height: number };
+/** Size as displayed (after any EXIF rotation, which `createImageBitmap` applies with `imageOrientation: "from-image"`). */
+export type ImageSize = { width: number; height: number; orientation?: number };
 
 const u16 = (v: DataView, o: number) => v.getUint16(o, false);
+
+/** EXIF orientation (1-8) of a JPEG, or 1 when there is none. */
+function exifOrientation(v: DataView): number {
+  let o = 2;
+  while (o + 4 < v.byteLength) {
+    if (v.getUint8(o) !== 0xff) return 1;
+    const marker = v.getUint8(o + 1);
+    if (marker === 0xda || marker === 0xd9) return 1;
+    const length = u16(v, o + 2);
+    if (marker === 0xe1 && o + 18 < v.byteLength && v.getUint32(o + 4, false) === 0x45786966) {
+      const tiff = o + 10;
+      const little = v.getUint16(tiff, false) === 0x4949;
+      const ifd = tiff + v.getUint32(tiff + 4, little);
+      if (ifd + 2 > v.byteLength) return 1;
+      const count = v.getUint16(ifd, little);
+      for (let i = 0; i < count; i += 1) {
+        const entry = ifd + 2 + i * 12;
+        if (entry + 10 > v.byteLength) return 1;
+        if (v.getUint16(entry, little) === 0x0112) {
+          const value = v.getUint16(entry + 8, little);
+          return value >= 1 && value <= 8 ? value : 1;
+        }
+      }
+      return 1;
+    }
+    o += 2 + length;
+  }
+  return 1;
+}
 
 function jpeg(v: DataView): ImageSize | null {
   let o = 2;
@@ -25,7 +55,11 @@ function jpeg(v: DataView): ImageSize | null {
     }
     const length = u16(v, o + 2);
     const isFrame = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
-    if (isFrame) return { height: u16(v, o + 5), width: u16(v, o + 7) };
+    if (isFrame) {
+      const raw = { height: u16(v, o + 5), width: u16(v, o + 7) };
+      const orientation = exifOrientation(v);
+      return orientation >= 5 ? { width: raw.height, height: raw.width, orientation } : { ...raw, orientation };
+    }
     o += 2 + length;
   }
   return null;
