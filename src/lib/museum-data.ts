@@ -32,7 +32,7 @@ async function fetchPublishedMuseum(slug: string): Promise<ViewerMuseum | null> 
   const supabase = createAnonClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("museums")
     .select(`${MUSEUM_COLUMNS}, halls!halls_museum_id_fkey(${VIEWER_HALL_COLUMNS}), artworks!artworks_museum_id_fkey(${VIEWER_ARTWORK_COLUMNS})`)
     .eq("slug", slug)
@@ -40,6 +40,12 @@ async function fetchPublishedMuseum(slug: string): Promise<ViewerMuseum | null> 
     .eq("halls.is_visible", true)
     .eq("artworks.is_active", true)
     .maybeSingle();
+  // A failed query must not look like "no such museum": a thrown error is never cached by unstable_cache,
+  // so one transient failure cannot turn a valid museum into a 404 for everyone for a minute.
+  if (error) {
+    console.error(`[museum-data] could not load museum "${slug}": ${error.message}`);
+    throw new Error("Could not load the museum.");
+  }
   if (!data) return null;
   const { halls, artworks, ...museum } = data as unknown as MuseumWithChildren;
   return buildViewerMuseum({ museum, halls: halls ?? [], artworks: artworks ?? [] });
