@@ -5,6 +5,7 @@ import { QUALITY } from "@/lib/gallery/quality";
 import { lightingPreset } from "@/lib/gallery/scene-look";
 import { composePhoto } from "@/lib/photo/compose";
 import { PHOTO_FORMATS, type PhotoFormatId } from "@/lib/photo/formats";
+import { supersampleLadder } from "@/lib/photo/limits";
 import type { ViewerMuseum } from "@/lib/viewer-model";
 import type { LightingPreset } from "@/types/database";
 import { detectDeviceTier } from "../device";
@@ -185,6 +186,21 @@ async function renderOnce(request: PhotoRequest, supersample: number): Promise<H
   }
 }
 
+/** The longest side this device can render: the smallest of its texture, renderbuffer and viewport limits. */
+function renderSideLimit(): number {
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+    if (!gl) return 4096;
+    const viewport = gl.getParameter(gl.MAX_VIEWPORT_DIMS) as Int32Array;
+    const limit = Math.min(Number(gl.getParameter(gl.MAX_TEXTURE_SIZE)), Number(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE)), viewport[0]);
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+    return Number.isFinite(limit) && limit > 0 ? limit : 4096;
+  } catch {
+    return 4096;
+  }
+}
+
 /**
  * Renders a real photograph of the 3D museum: the same scene the visitor walks
  * through, seen from a photographer's camera standing at the artwork's stop.
@@ -193,7 +209,9 @@ async function renderOnce(request: PhotoRequest, supersample: number): Promise<H
 export async function renderMuseumPhoto(request: PhotoRequest): Promise<HTMLCanvasElement> {
   // Weak devices start at 1x: a supersampled Story render can exhaust their memory.
   const supersample = detectDeviceTier() === "low" ? Math.min(request.supersample, 1) : request.supersample;
-  const ladder = [supersample, 1.25, 1].filter((value, index, all) => value <= supersample && all.indexOf(value) === index);
+  const format = PHOTO_FORMATS[request.format];
+  const ladder = supersampleLadder(supersample, format.width, format.height, request.outputScale, renderSideLimit());
+  if (ladder.length === 0) throw new PhotoRenderError("webgl", "This device cannot render an image of that size.");
   let lastError: unknown = null;
   for (const supersample of ladder) {
     try {

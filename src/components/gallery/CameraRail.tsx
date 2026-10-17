@@ -28,8 +28,6 @@ type Props = {
 const ZOOM_IN = 0.62;
 /** Frames still drawn after a glide ends, so the restored resolution and the final pose are on screen. */
 const SETTLE_FRAMES = 3;
-/** A resize or a zoom toggle re-frames quickly instead of gliding for a full second. */
-const REFRAME_SECONDS = 0.45;
 
 // Axes: 0 x, 1 y, 2 z of the camera; 3 x, 4 y of the gaze point on the wall.
 const AXES = 5;

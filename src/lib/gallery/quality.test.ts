@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FRAME_BUDGET_MS, GOVERNOR_WINDOW, LADDERS, QUALITY, detectTier, forMobile, governorStep, shouldSampleFrame, initialGovernor, isWeakGpu, maxLevel, parsePreference, resolveQuality, tierAt, tierForPreference, windowStats, type GovernorState, type QualityTier } from "./quality";
+import { FRAME_BUDGET_MS, GOVERNOR_WINDOW, QUALITY, detectTier, forMobile, governorStep, shouldSampleFrame, initialGovernor, isWeakGpu, maxLevel, parsePreference, resolveQuality, tierAt, tierForPreference, windowStats, type GovernorState, type QualityTier } from "./quality";
 
 const desktop = { viewportWidth: 1440, coarsePointer: false, deviceMemory: 8, hardwareConcurrency: 8 };
 
