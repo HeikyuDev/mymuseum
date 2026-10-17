@@ -135,10 +135,11 @@ export function sweepGeometry(openW: number, openH: number, profile: readonly Pr
 export function frameGeometry(style: FrameStyle, openW: number, openH: number, simple = false): BufferGeometry | null {
   const profile = FRAME_PROFILES[style];
   if (!profile) return null;
-  // Cheap tier: a plain raised box profile instead of the multi-step moulding.
+  // Cheap tier: a stepped profile with a bevelled lip and an outer shoulder (a handful of quads per side).
+  // The steps face different ways, so the frame still reads as a moulding under flat ambient light.
   if (simple) {
-    const depth = FRAME_SPECS[style].depth;
-    return sweepGeometry(openW, openH, [[0, depth * 0.75], [0.003, depth], [FRAME_SPECS[style].pad - 0.003, depth]], FRAME_SPECS[style].pad);
+    const { depth, pad } = FRAME_SPECS[style];
+    return sweepGeometry(openW, openH, [[0, depth * 0.62], [Math.min(0.006, pad * 0.18), depth], [pad * 0.62, depth], [pad * 0.74, depth * 0.78], [pad - 0.002, depth * 0.78]], pad);
   }
   return sweepGeometry(openW, openH, profile, FRAME_SPECS[style].pad);
 }
